@@ -51,4 +51,9 @@ class DataLoader:
             (self.__train_data["user_id"], self.__train_data["item_id"])
         ))
 
-        return train_data
+        test_data = sparse.csr_matrix((
+            self.__test_data["rating"],
+            (self.__test_data["user_id"], self.__test_data["item_id"])
+        ))
+
+        return train_data, test_data
