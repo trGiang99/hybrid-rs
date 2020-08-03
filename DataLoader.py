@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import numpy as np
 
+from scipy import sparse
+
 
 class DataLoader:
     """
@@ -39,6 +41,14 @@ class DataLoader:
         ]
 
         neg_mask = [not x for x in mask]
-        train_data, test_data = self.__ratings[mask], self.__ratings[neg_mask]
+        self.__train_data, self.__test_data = self.__ratings[mask], self.__ratings[neg_mask]
 
-        return train_data, test_data
+    def load_data(self):
+        """Convert dataframe of training set and test set to sparse matrix
+        """
+        train_data = sparse.csr_matrix((
+            self.__train_data["rating"],
+            (self.__train_data["user_id"], self.__train_data["item_id"])
+        ))
+
+        return train_data
