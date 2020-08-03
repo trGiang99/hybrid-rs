@@ -1,19 +1,14 @@
 import os
-import pandas as pd
+from DataLoader import DataLoader
 
+manipulator = DataLoader("movielens-sample")
 
-def read_data():
-    data_dir = "movielens10k/rating.csv"
+manipulator.read_data()
 
-    names = ['user_id', 'item_id', 'rating', 'timestamp']
-    data = pd.read_csv(data_dir, names=names, engine='python')
-    num_users = data.user_id.unique().shape[0]
-    num_items = data.item_id.unique().shape[0]
-    return data, num_users, num_items
+train_data, test_data = manipulator.split_data(test_ratio=0.2)
 
+print (f"Training Data:\nLenght: {len(train_data)}")
+print(train_data.head(5))
 
-data, num_users, num_items = read_data()
-sparsity = 1 - len(data) / (num_users * num_items)
-print(f'number of users: {num_users}, number of items: {num_items}')
-print(f'matrix sparsity: {sparsity:f}')
-print(data.head(5))
+print (f"Test Data:\nLenght: {len(test_data)}")
+print(test_data.head(5))
