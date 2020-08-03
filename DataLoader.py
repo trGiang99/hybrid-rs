@@ -44,7 +44,7 @@ class DataLoader:
         self.__train_data, self.__test_data = self.__ratings[mask], self.__ratings[neg_mask]
 
     def load_data(self):
-        """Convert dataframe of training set and test set to sparse matrix
+        """Convert dataframe of training set and test set to scipy.sparse matrix
         """
         train_data = sparse.csr_matrix((
             self.__train_data["rating"],
