@@ -1,4 +1,4 @@
-# A Novel Hybrid Recommendation System Integrating Content-Based and Rating Information
+# Recommendation System on MovieLens 20M Dataset (working in progress)
 
 ## Dataset
 In this repo, I'm using the Movielens 20M Dataset from [Kaggle](https://www.kaggle.com/grouplens/movielens-20m-dataset).
