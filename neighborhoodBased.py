@@ -65,7 +65,7 @@ class kNN:
 
         Args:
             u (int): index of user
-            i (int ): index of item
+            i (int): index of item
         """
         # If there's already a rating
         if(self.ultility[u,i]):
@@ -85,7 +85,7 @@ class kNN:
             user_rated_i = [*sim.keys()][:self.k]
             sim = np.array([*sim.values()])[:self.k]
 
-            prediction = np.sum(np.multiply(np.array([self.ultility[v,i] for v in user_rated_i]), sim)) / np.sum(sim)
+            prediction = np.sum(np.multiply(np.array([self.ultility[v,i] for v in user_rated_i]), sim)) / (np.sum(sim) + 1e-8)
         # Item based CF
         else:
             # Find items that have been rated by user u beside item i
@@ -100,6 +100,20 @@ class kNN:
             items_ratedby_u = [*sim.keys()][:self.k]
             sim = np.array([*sim.values()])[:self.k]
 
-            prediction = np.sum(np.multiply(np.array([self.ultility[i,j] for j in items_ratedby_u]), sim)) / np.sum(sim)
+            prediction = np.sum(np.multiply(np.array([self.ultility[u,j] for j in items_ratedby_u]), sim)) / (np.sum(sim) + 1e-8)
 
         return prediction
+
+    def __recommend(self, u):
+        """Determine all items should be recommended for user u. (uuCF =1)
+        or all users who might have interest on item u (uuCF = 0)
+        The decision is made based on all i such that: self.pred(u, i) > 0.
+        Suppose we are considering items which have not been rated by u yet.
+
+        Args:
+            u (int): user that we are recommending
+
+        Returns:
+            list: a list of movie that might suit user u
+        """
+        pass
