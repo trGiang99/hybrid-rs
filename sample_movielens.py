@@ -17,6 +17,7 @@ def sample_movielens(movielens_path, movielens_sample_path, sample_size=10000):
     # List contains all movie's IDs in the new dataset
     movies_list = []
 
+    print("Reading ratings file...")
     with open(movielens_path + "/rating.csv", 'r') as movielens:
         reader = csv.reader(movielens)
 
@@ -31,27 +32,32 @@ def sample_movielens(movielens_path, movielens_sample_path, sample_size=10000):
             if (idx > sample_size):
                 break
 
+    print("Reading genome tags file...")
     genome_scores = []
     # Get all genome score for the Ids in the movie_list above
     with open(movielens_path + "/genome_scores.csv", "r", encoding="utf-8") as scores:
         reader = csv.reader(scores)
         genome_scores = [score for _, score in enumerate(reader) if score[0] in movies_list]
 
+    print("Reading movies information...")
     # Get information of all movies and assign it to the Ids in movie_list respectively
     with open(movielens_path + "/movie.csv", 'r', encoding="utf-8") as movies:
         reader = csv.reader(movies)
         movies_list = [movie for _, movie in enumerate(reader) if movie[0] in movies_list]
 
+    print("Writing sample ratings...")
     # Write 10k ratings to new path
     with open(movielens_sample_path + "/rating.csv", 'w') as ratings:
         writer = csv.writer(ratings)
         writer.writerows(rating_list)
 
+    print("Writing movies information...")
     # Write all movies in the movie list to new path
     with open(movielens_sample_path + "/movie.csv", 'w', encoding="utf-8") as movies:
         writer = csv.writer(movies)
         writer.writerows(movies_list)
 
+    print("Writing genome tags...")
     # Write all needed score to new path
     with open(movielens_sample_path + "/genome_scores.csv", 'w', encoding="utf-8") as scores:
         writer = csv.writer(scores)
@@ -61,4 +67,4 @@ def sample_movielens(movielens_path, movielens_sample_path, sample_size=10000):
 if __name__ == "__main__":
 
     # Sampling MovieLens 20M Dataset to MovieLens 10k Dataset for the sake of testing
-    sample_movielens("movielens20M", "movielens-sample")
+    sample_movielens("movielens20M", "movielens-sample", sample_size=10000)
