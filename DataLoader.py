@@ -23,12 +23,10 @@ class DataLoader:
         """ Read ratings from data_folder
         """
         names = ['user_id', 'item_id', 'rating', 'timestamp']
-        ratings = pd.read_csv(
+        self.__ratings = pd.read_csv(
             self.__data_folder + "/rating.csv",
             header=0, names=names
         )
-
-        self.__ratings = ratings
 
     def split_data(self, test_ratio=0.1):
         """Randomly split dataset into training set and test set.
@@ -36,15 +34,21 @@ class DataLoader:
         Args:
             test_ratio (float, optional): Size ratio of test set to dataset. Defaults to 0.1.
         """
-        mask = [True if x == 1 else False
+        mask = [
+            True if x == 1 else False
                 for x in np.random.uniform(0, 1, (len(self.__ratings))) < 1 - test_ratio
         ]
+
+        # Keep the last user and item on the training set
+        #   to maintain the shape of the utility matrix.
+        mask[-1] = True
+        mask[self.__ratings["item_id"].idxmax(axis=0)] = True
 
         neg_mask = [not x for x in mask]
         self.__train_data, self.__test_data = self.__ratings[mask], self.__ratings[neg_mask]
 
     def load_data(self):
-        """Convert dataframe of training set and test set to scipy.sparse matrix
+        """Convert dataframe of training set to scipy.sparse matrix
         Row u is the ratings that user u has given to all item.
         Column i is the ratings that all users have given to item i.
         """
@@ -53,9 +57,4 @@ class DataLoader:
             (self.__train_data["user_id"], self.__train_data["item_id"])
         ))
 
-        test_data = sparse.csr_matrix((
-            self.__test_data["rating"],
-            (self.__test_data["user_id"], self.__test_data["item_id"])
-        ))
-
-        return train_data, test_data
+        return train_data, self.__test_data
