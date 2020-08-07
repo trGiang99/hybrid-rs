@@ -28,38 +28,6 @@ class kNN:
         self.baseline = baseline
         self.uuCF = uuCF
 
-    def __cosine(self, i, j):
-        """Calculate cosine simularity score between object i and object j.
-        Object i and j could be item or user, but must be the same.
-
-        Args:
-            i (int): index of object i
-            j (int): index of object j
-
-        Returns:
-            float: cosine simularity score
-        """
-        # User based CF
-        if(self.uuCF):
-            sum_ratings = self.ultility[i,:] * self.ultility[j,:].transpose()
-            if (not sum_ratings):
-                return 0
-
-            norm2_ratings_i = norm(self.ultility[i,:], 'fro')
-            norm2_ratings_j = norm(self.ultility[j,:], 'fro')
-
-            return (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
-        # Item based CF
-        else:
-            sum_ratings = self.ultility[:,i].transpose() * self.ultility[:,j]
-            if (not sum_ratings):
-                return 0
-
-            norm2_ratings_i = norm(self.ultility[:,i], 'fro')
-            norm2_ratings_j = norm(self.ultility[:,j], 'fro')
-
-            return (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
-
     def prediction(self, u, i):
         """Predict the rating of user u for item i
 
@@ -116,4 +84,39 @@ class kNN:
         Returns:
             list: a list of movie that might suit user u
         """
+        pass
+
+    def __cosine(self, i, j):
+        """Calculate cosine simularity score between object i and object j.
+        Object i and j could be item or user, but must be the same.
+
+        Args:
+            i (int): index of object i
+            j (int): index of object j
+
+        Returns:
+            float: cosine simularity score
+        """
+        # User based CF
+        if(self.uuCF):
+            sum_ratings = self.ultility[i,:] * self.ultility[j,:].transpose()
+            if (not sum_ratings):
+                return 0
+
+            norm2_ratings_i = norm(self.ultility[i,:], 'fro')
+            norm2_ratings_j = norm(self.ultility[j,:], 'fro')
+
+            return (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
+        # Item based CF
+        else:
+            sum_ratings = self.ultility[:,i].transpose() * self.ultility[:,j]
+            if (not sum_ratings):
+                return 0
+
+            norm2_ratings_i = norm(self.ultility[:,i], 'fro')
+            norm2_ratings_j = norm(self.ultility[:,j], 'fro')
+
+            return (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
+
+    def __pcc(self, i, j):
         pass
