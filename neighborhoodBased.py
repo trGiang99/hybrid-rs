@@ -151,8 +151,7 @@ class kNN:
                     norm2_ratings_v = norm(self.ultility[v,:], 'fro')
 
                     self.S[u,v] = (sum_ratings / (norm2_ratings_u * norm2_ratings_v)).data[0]
-                    count += 1
-            print(count)
+
         # Item based CF
         else:
             items = np.unique(self.ultility.nonzero()[1])
