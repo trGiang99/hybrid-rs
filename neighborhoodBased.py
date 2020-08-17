@@ -31,13 +31,14 @@ class kNN:
         self.uuCF = uuCF
 
         if(uuCF):
-            self.S = sparse.lil_matrix((self.ultility.shape[0], self.ultility.shape[0]))
+            self.S = sparse.lil_matrix((self.ultility.shape[0], self.ultility.shape[0]), dtype='float64')
         else:
-            self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]))
+            self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]), dtype='float64')
 
     def fit(self):
         """Calculate the similarity matrix
         """
+        self.__normalize()
         self.distance()
 
         self.S.tocsr()      # Convert to Compressed Sparse Row format for faster arithmetic operations.
@@ -141,7 +142,7 @@ class kNN:
             users = np.unique(self.ultility.nonzero()[0])
 
             for uidx, u in enumerate(users):
-                for v in users[uidx:]:
+                for v in users[(uidx+1):]:
                     sum_ratings = self.ultility[u,:] * self.ultility[v,:].transpose()
                     if (not sum_ratings):
                         self.S[u,v] = 0
@@ -157,7 +158,7 @@ class kNN:
             items = np.unique(self.ultility.nonzero()[1])
 
             for iidx, i in enumerate(items):
-                for j in items[iidx:]:
+                for j in items[(iidx+1):]:
                     sum_ratings = self.ultility[:,i].transpose() * self.ultility[:,j]
                     if (not sum_ratings):
                         self.S[i,j] = 0
@@ -170,3 +171,19 @@ class kNN:
 
     def __pcc(self, i, j):
         pass
+
+    def __normalize(self):
+        """Normalize the ultility matrix
+        """
+        tot = np.array(self.ultility.sum(axis=1).squeeze())[0]
+        cts = np.array([self.ultility[k].count_nonzero() for k in range(self.ultility.shape[0])])
+
+        mu = tot / cts
+
+        d = sparse.diags(mu, 0)
+        b = self.ultility.copy()
+        b.data = np.ones_like(b.data)
+
+        self.ultility -= d*b
+
+        print(self.ultility)
