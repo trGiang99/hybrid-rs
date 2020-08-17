@@ -138,23 +138,26 @@ class kNN:
         """
         # User based CF
         if(self.uuCF):
-            n_users = self.ultility.shape[0] - 1
-            for i in range(1, n_users + 1):
-                for j in range(i, n_users + 1):
-                    sum_ratings = self.ultility[i,:] * self.ultility[j,:].transpose()
+            users = np.unique(self.ultility.nonzero()[0])
+
+            for uidx, u in enumerate(users):
+                for v in users[uidx:]:
+                    sum_ratings = self.ultility[u,:] * self.ultility[v,:].transpose()
                     if (not sum_ratings):
-                        self.S[i,j] = 0
+                        self.S[u,v] = 0
                         continue
 
-                    norm2_ratings_i = norm(self.ultility[i,:], 'fro')
-                    norm2_ratings_j = norm(self.ultility[j,:], 'fro')
+                    norm2_ratings_u = norm(self.ultility[u,:], 'fro')
+                    norm2_ratings_v = norm(self.ultility[v,:], 'fro')
 
-                    self.S[i,j] = (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
+                    self.S[u,v] = (sum_ratings / (norm2_ratings_u * norm2_ratings_v)).data[0]
+
         # Item based CF
         else:
-            n_items = self.ultility.shape[1] - 1
-            for i in range(1, n_items + 1):
-                for j in range(i, n_items + 1):
+            items = np.unique(self.ultility.nonzero()[1])
+
+            for iidx, i in enumerate(items):
+                for j in items[iidx:]:
                     sum_ratings = self.ultility[:,i].transpose() * self.ultility[:,j]
                     if (not sum_ratings):
                         self.S[i,j] = 0
