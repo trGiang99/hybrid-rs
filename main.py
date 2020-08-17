@@ -5,6 +5,15 @@ from neighborhoodBased import kNN
 import numpy as np
 
 
+print("\nReimlementation of Basic KNN:")
+train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load()
+
+knn = kNN(data=train_data, k=10, distance="cosine", uuCF=1)
+knn.fit()
+print (f'RMSE = {knn.rmse(test_data)}')
+
+
+print("\nBasic KNN from NicolasHug/Surprise:")
 # Import surprise module
 from surprise.prediction_algorithms.knns import KNNBasic
 from surprise import Dataset
@@ -22,7 +31,7 @@ trainset, testset = train_test_split(data, test_size=.2)
 # Config for surprise similarity function
 sim_options = {
     'name': 'cosine',
-    'user_based': False
+    'user_based': True
 }
 
 algo = KNNBasic(k=10, sim_options=sim_options)
@@ -30,11 +39,3 @@ algo.fit(trainset)
 
 predictions = algo.test(testset)
 accuracy.rmse(predictions)
-
-
-print("\nReimlementation of Basic KNN:")
-train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load()
-
-knn = kNN(data=train_data, k=10, distance="cosine", uuCF=0)
-knn.fit()
-print (f'RMSE = {knn.rmse(test_data)}')
