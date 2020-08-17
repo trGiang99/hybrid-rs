@@ -3,15 +3,18 @@ from DataLoader import DataLoader
 from neighborhoodBased import kNN
 
 import numpy as np
+import time
 
 
 print("\nReimlementation of Basic KNN:")
+
+start_time = time.time()
 train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load()
 
 knn = kNN(data=train_data, k=10, distance="cosine", uuCF=1)
 knn.fit()
 print (f'RMSE = {knn.rmse(test_data)}')
-
+print("--- %s seconds ---" % (time.time() - start_time))
 
 print("\nBasic KNN from NicolasHug/Surprise:")
 # Import surprise module
