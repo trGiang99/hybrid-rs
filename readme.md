@@ -36,3 +36,15 @@ py main.py
 ```
 
 After a while, final RMSE score will be display to the terminal, and also the runtime.
+On 100k sample of MovieLens:
+```
+Reimlementation of Basic KNN:
+RMSE: 1.1416418628195029
+Runtime: 262.9693720340729 seconds.
+
+Basic KNN from NicolasHug/Surprise:
+Computing the cosine similarity matrix...
+Done computing similarity matrix.
+RMSE: 1.0441
+```
+Not a good result, but worth to learn from.
