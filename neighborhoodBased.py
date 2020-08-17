@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 
 from math import sqrt
+
+from scipy import sparse
 from scipy.sparse.linalg import norm
 
 
@@ -19,9 +21,9 @@ class kNN:
         self.k = k
         self.ultility = data
 
-        self.supported_disc_func = ["cosine", "pcc", "cubebCos", "cubedPcc"]
+        self.supported_disc_func = ["cosine"]
 
-        assert distance in self.supported_disc_func, f"distance function should be one of {self.supported_disc_func}"
+        assert distance in self.supported_disc_func, f"Distance function should be one of {self.supported_disc_func}"
         if distance == "cosine":
             self.distance = self.__cosine
 
@@ -29,19 +31,16 @@ class kNN:
         self.uuCF = uuCF
 
         if(uuCF):
-            self.S = np.zeros([self.ultility.shape[0], self.ultility.shape[0]])
+            self.S = sparse.lil_matrix((self.ultility.shape[0], self.ultility.shape[0]))
         else:
-            self.S = np.zeros([self.ultility.shape[1], self.ultility.shape[1]])
+            self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]))
 
     def fit(self):
         """Calculate the similarity matrix
         """
         self.distance()
 
-        # Turn the triangle matrix self.S into a full matrix
-        full_S = self.S.T + self.S
-        np.fill_diagonal(full_S, np.diag(self.S))
-        self.S = full_S
+        self.S.tocsr()      # Convert to Compressed Sparse Row format for faster arithmetic operations.
 
     def predict(self, u, i):
         """Predict the rating of user u for item i
@@ -57,16 +56,20 @@ class kNN:
         # User based CF
         if (self.uuCF):
             # Find users that have rated item i beside user u
-            user_rated_i = self.ultility.getcol(i).nonzero()[0]
+            users_rated_i = self.ultility.getcol(i).nonzero()[0]
 
-            sim = self.S[u, user_rated_i]
+            sim = []
+            for user_rated_i in users_rated_i:
+                sim.append(self.S[u, user_rated_i]) if self.S[u, user_rated_i] else sim.append(self.S[user_rated_i, u])
+
+            sim = np.array(sim)
 
             # Sort similarity list in descending
             k_nearest_users = np.argsort(sim)[-self.k:]
 
             # Get first k users or all if number of similar users smaller than k
             sim = sim[k_nearest_users]
-            ratings = np.array([self.ultility[v, i] for v in user_rated_i[k_nearest_users]])
+            ratings = np.array([self.ultility[v, i] for v in users_rated_i[k_nearest_users]])
 
             prediction = np.sum(sim * ratings) / (np.sum(sim) + 1e-8)
         # Item based CF
@@ -74,14 +77,18 @@ class kNN:
             # Find items that have been rated by user u beside item i
             items_ratedby_u = self.ultility.getrow(u).nonzero()[1]
 
-            sim = self.S[i, items_ratedby_u]
+            sim = []
+            for item_ratedby_u in items_ratedby_u:
+                sim.append(self.S[i, item_ratedby_u]) if self.S[i, item_ratedby_u] else sim.append(self.S[item_ratedby_u, i])
+
+            sim = np.array(sim)
 
             # Sort similarity list in descending
             k_nearest_items = np.argsort(sim)[-self.k:]
 
             # Get first k items or all if number of similar items smaller than k
             sim = sim[k_nearest_items]
-            ratings = np.array([self.ultility[u, j] for j in user_rated_i[k_nearest_items]])
+            ratings = np.array([self.ultility[u, j] for j in items_ratedby_u[k_nearest_items]])
 
             prediction = np.sum(sim * ratings) / (np.sum(sim) + 1e-8)
 
@@ -123,13 +130,11 @@ class kNN:
     def __cosine(self):
         """Calculate cosine simularity score between object i and object j.
         Object i and j could be item or user, but must be the same.
+        Assign the similarity score to self.S (similarity matrix).
 
         Args:
             i (int): index of object i
             j (int): index of object j
-
-        Returns:
-            float: cosine simularity score
         """
         # User based CF
         if(self.uuCF):
@@ -138,13 +143,13 @@ class kNN:
                 for j in range(i, n_users + 1):
                     sum_ratings = self.ultility[i,:] * self.ultility[j,:].transpose()
                     if (not sum_ratings):
-                        self.S[i][j] = 0
+                        self.S[i,j] = 0
                         continue
 
                     norm2_ratings_i = norm(self.ultility[i,:], 'fro')
                     norm2_ratings_j = norm(self.ultility[j,:], 'fro')
 
-                    self.S[i][j] = (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
+                    self.S[i,j] = (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
         # Item based CF
         else:
             n_items = self.ultility.shape[1] - 1
@@ -152,12 +157,13 @@ class kNN:
                 for j in range(i, n_items + 1):
                     sum_ratings = self.ultility[:,i].transpose() * self.ultility[:,j]
                     if (not sum_ratings):
-                        return 0
+                        self.S[i,j] = 0
+                        continue
 
                     norm2_ratings_i = norm(self.ultility[:,i], 'fro')
                     norm2_ratings_j = norm(self.ultility[:,j], 'fro')
 
-                    self.S[i][j] = (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
+                    self.S[i,j] = (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
 
     def __pcc(self, i, j):
         pass
