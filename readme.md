@@ -35,4 +35,4 @@ Then on your terminal, run
 py main.py
 ```
 
-After a while, final RMSE score will be display to the terminal.
+After a while, final RMSE score will be display to the terminal, and also the runtime.
