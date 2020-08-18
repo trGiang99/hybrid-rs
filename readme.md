@@ -30,21 +30,30 @@ train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load()
 
 Update the folder name where you put the sampling data (or the whole MovieLens 20M dataset), change `test_ratio` (default ratio is 0.1).
 
-Then on your terminal, run
+The main focus here is
+```python
+knn = kNN(data=train_data, k=5, distance="cosine", uuCF=1, normalize="none")
+```
+where `k` is the number of nearest neibors use in prediction,
+`distance` is the distance function (you can choose from `"cosine"` or `"pearson"`),
+`normalize` is the normalization method (`"mean"` or `"baseline"` or `"none"` if you will),
+and `uuCF` is set to 1 if using user-based CF, 0 if using item-based CF.
+
+Then on your terminal (Windows), run
 ```
 py main.py
 ```
 
 After a while, final RMSE score will be display to the terminal, and also the runtime.
-On 100k sample of MovieLens:
+On a 10k sample of MovieLens:
 ```
-Reimlementation of Basic KNN:
-RMSE: 1.1416418628195029
-Runtime: 262.9693720340729 seconds.
+Reimlementation of KNN with mean normalization:
+RMSE: 1.053001464575583
+Runtime: 5.73391056060791 seconds.
 
-Basic KNN from NicolasHug/Surprise:
+KNN with mean normalization from NicolasHug/Surprise:
 Computing the cosine similarity matrix...
 Done computing similarity matrix.
-RMSE: 1.0441
+RMSE: 1.0634
 ```
-Not a good result, but worth to learn from.
+Compare to [NicolasHug/Surprise](https://github.com/NicolasHug/Surprise), the runtime is bad with this small sample, but can be improved.
