@@ -1,24 +1,24 @@
-from DataLoader import DataLoader
-
-from neighborhoodBased import kNN
-
 import numpy as np
 import time
+
+from DataLoader import DataLoader
+from neighborhoodBased import kNN
 
 
 print("\nReimlementation of Basic KNN:")
 
-start_time = time.time()
 train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load()
 
-knn = kNN(data=train_data, k=10, distance="cosine", uuCF=1)
+start_time = time.time()
+knn = kNN(data=train_data, k=5, distance="cosine", uuCF=1, normalize="none")
 knn.fit()
-print (f'RMSE = {knn.rmse(test_data)}')
-print("--- %s seconds ---" % (time.time() - start_time))
+print (f'RMSE: {knn.rmse(test_data)}')
+print(f'Runtime: {time.time() - start_time} seconds.')
 
-print("\nBasic KNN from NicolasHug/Surprise:")
+
+print("\nKNN with mean normalization from NicolasHug/Surprise:")
 # Import surprise module
-from surprise.prediction_algorithms.knns import KNNBasic
+from surprise.prediction_algorithms.knns import KNNWithMeans
 from surprise import Dataset
 from surprise import Reader
 from surprise import accuracy
@@ -37,7 +37,7 @@ sim_options = {
     'user_based': True
 }
 
-algo = KNNBasic(k=10, sim_options=sim_options)
+algo = KNNWithMeans(k=5, sim_options=sim_options)
 algo.fit(trainset)
 
 predictions = algo.test(testset)

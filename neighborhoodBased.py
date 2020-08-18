@@ -8,39 +8,59 @@ from scipy.sparse.linalg import norm
 
 
 class kNN:
-    """Implementation of kNN argorithm.
+    """Reimplementation of kNN argorithm.
 
     Args:
-            data: training data
-            k (int): number of neibors use in prediction
+            data: Training data
+            k (int): Number of neibors use in prediction
             distance (str, optional): Distance function. Defaults to "cosine".
-            baseline (int, optional): assign to 1 if using basline estimate, 0 if not. Defaults to 0.
-            uuCF (boolean, optional): assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
+            baseline (int, optional): Assign to 1 if using basline estimate, 0 if not. Defaults to 0.
+            uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
+            normalize (str, optional): Normalization method. Defaults to "none".
     """
-    def __init__(self, data, k, distance="cosine", baseline=0, uuCF=0):
+    def __init__(self, data, k, distance="cosine", uuCF=0, normalize="none"):
         self.k = k
         self.ultility = data
 
-        self.supported_disc_func = ["cosine"]
+        self.__supported_disc_func = ["cosine", "pearson"]
 
-        assert distance in self.supported_disc_func, f"Distance function should be one of {self.supported_disc_func}"
+        assert distance in self.__supported_disc_func, f"Distance function should be one of {self.__supported_disc_func}"
         if distance == "cosine":
-            self.distance = self.__cosine
+            self.__distance = self.__cosine
+        elif distance == "pearson":
+            self.__distance = self.__pcc
 
-        self.baseline = baseline
         self.uuCF = uuCF
 
-        if(uuCF):
-            self.S = sparse.lil_matrix((self.ultility.shape[0], self.ultility.shape[0]))
+        self.__normalize_method = ["none", "mean", "baseline"]
+        assert normalize in self.__normalize_method, f"Normalize method should be one of {self.__normalize_method}"
+        if normalize == "mean":
+            self.__normalize = self.__mean_normalize
+        elif normalize == "baseline":
+            self.__normalize = self.__baseline
         else:
-            self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]))
+            self.__normalize = False
+
+        # Set up the similarity matrix
+        if(uuCF):
+            self.S = sparse.lil_matrix((self.ultility.shape[0], self.ultility.shape[0]), dtype='float64')
+        else:
+            self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]), dtype='float64')
 
     def fit(self):
-        """Calculate the similarity matrix
+        """Fit data (ultility matrix) into the model.
         """
-        self.distance()
+        if(self.__normalize):
+            print("Normalizing the utility matrix ...")
+            self.__normalize()
+            print("Done.")
 
-        self.S.tocsr()      # Convert to Compressed Sparse Row format for faster arithmetic operations.
+        print('Computing similarity matrix ...')
+        self.__distance()
+        print('Done.')
+
+        # Convert to Compressed Sparse Row format for faster arithmetic operations.
+        self.S.tocsr()
 
     def predict(self, u, i):
         """Predict the rating of user u for item i
@@ -57,6 +77,7 @@ class kNN:
         if (self.uuCF):
             # Find users that have rated item i beside user u
             users_rated_i = self.ultility.getcol(i).nonzero()[0]
+            users_rated_i = users_rated_i[users_rated_i != u]
 
             sim = []
             for user_rated_i in users_rated_i:
@@ -71,11 +92,12 @@ class kNN:
             sim = sim[k_nearest_users]
             ratings = np.array([self.ultility[v, i] for v in users_rated_i[k_nearest_users]])
 
-            prediction = np.sum(sim * ratings) / (np.sum(sim) + 1e-8)
+            prediction = np.sum(sim * ratings) / (np.abs(sim).sum() + 1e-8)
         # Item based CF
         else:
             # Find items that have been rated by user u beside item i
             items_ratedby_u = self.ultility.getrow(u).nonzero()[1]
+            items_ratedby_u = items_ratedby_u[items_ratedby_u != i]
 
             sim = []
             for item_ratedby_u in items_ratedby_u:
@@ -90,8 +112,10 @@ class kNN:
             sim = sim[k_nearest_items]
             ratings = np.array([self.ultility[u, j] for j in items_ratedby_u[k_nearest_items]])
 
-            prediction = np.sum(sim * ratings) / (np.sum(sim) + 1e-8)
+            prediction = np.sum(sim * ratings) / (np.abs(sim).sum() + 1e-8)
 
+        if (self.__normalize):
+            return prediction + self.mu[u]
         return prediction
 
     def __recommend(self, u):
@@ -121,8 +145,8 @@ class kNN:
         n_test_ratings = test_data.shape[0]
 
         for n in range(n_test_ratings):
-            # print(f"Predicting {test_data['user_id'][n]},{test_data['item_id'][n]}")
             pred = self.predict(test_data["user_id"][n], test_data["item_id"][n])
+            # print(f"Predicting {test_data['user_id'][n]},{test_data['item_id'][n]}: {pred} - {test_data['rating'][n]}")
             squared_error += (pred - test_data["rating"][n])**2
 
         return np.sqrt(squared_error/n_test_ratings)
@@ -141,7 +165,7 @@ class kNN:
             users = np.unique(self.ultility.nonzero()[0])
 
             for uidx, u in enumerate(users):
-                for v in users[uidx:]:
+                for v in users[(uidx+1):]:
                     sum_ratings = self.ultility[u,:] * self.ultility[v,:].transpose()
                     if (not sum_ratings):
                         self.S[u,v] = 0
@@ -157,7 +181,7 @@ class kNN:
             items = np.unique(self.ultility.nonzero()[1])
 
             for iidx, i in enumerate(items):
-                for j in items[iidx:]:
+                for j in items[(iidx+1):]:
                     sum_ratings = self.ultility[:,i].transpose() * self.ultility[:,j]
                     if (not sum_ratings):
                         self.S[i,j] = 0
@@ -169,4 +193,30 @@ class kNN:
                     self.S[i,j] = (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
 
     def __pcc(self, i, j):
+        pass
+
+    def __mean_normalize(self):
+        """Normalize the ultility matrix.
+        This method only normalize the data base on the mean of ratings.
+        Any unrated item will remain the same.
+        """
+        tot = np.array(self.ultility.sum(axis=1).squeeze())[0]
+        cts = np.diff(self.ultility.indptr)
+        cts[cts == 0] = 1       # Avoid dividing by 0 resulting nan.
+
+        # Mean ratings of each users.
+        self.mu = tot / cts
+
+        # Diagonal matrix with the means on the diagonal.
+        d = sparse.diags(self.mu, 0)
+
+        # A matrix that is like Ultility, but has 1 at the non-zero position instead of the ratings.
+        b = self.ultility.copy()
+        b.data = np.ones_like(b.data)
+
+        # d*b = Mean matrix - a matrix with the means of each row at the non-zero position
+        # Subtract the mean matrix to get the normalize data.
+        self.ultility -= d*b
+
+    def __baseline(self):
         pass
