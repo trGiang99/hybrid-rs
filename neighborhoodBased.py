@@ -8,7 +8,7 @@ from scipy.sparse.linalg import norm
 
 
 class kNN:
-    """Implementation of kNN argorithm.
+    """Reimplementation of kNN argorithm.
 
     Args:
             data: training data
@@ -180,16 +180,24 @@ class kNN:
         pass
 
     def __normalize(self):
-        """Normalize the ultility matrix
+        """Normalize the ultility matrix.
+        For now, this method only normalize the data base on the mean of ratings.
+        Any unrated item will remain the same.
         """
         tot = np.array(self.ultility.sum(axis=1).squeeze())[0]
         cts = np.diff(self.ultility.indptr)
         cts[cts == 0] = 1       # Avoid dividing by 0 resulting nan.
 
+        # Mean ratings of each users.
         self.mu = tot / cts
 
+        # Diagonal matrix with the means on the diagonal.
         d = sparse.diags(self.mu, 0)
+
+        # A matrix that is like Ultility, but has 1 at the non-zero position instead of the ratings.
         b = self.ultility.copy()
         b.data = np.ones_like(b.data)
 
+        # d*b = Mean matrix - a matrix with the means of each row at the non-zero position
+        # Subtract the mean matrix to get the normalize data.
         self.ultility -= d*b
