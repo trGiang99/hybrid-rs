@@ -11,24 +11,35 @@ class kNN:
     """Reimplementation of kNN argorithm.
 
     Args:
-            data: training data
-            k (int): number of neibors use in prediction
+            data: Training data
+            k (int): Number of neibors use in prediction
             distance (str, optional): Distance function. Defaults to "cosine".
-            baseline (int, optional): assign to 1 if using basline estimate, 0 if not. Defaults to 0.
-            uuCF (boolean, optional): assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
+            baseline (int, optional): Assign to 1 if using basline estimate, 0 if not. Defaults to 0.
+            uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
+            normalize (str, optional): Normalization method. Defaults to "none".
     """
-    def __init__(self, data, k, distance="cosine", baseline=0, uuCF=0):
+    def __init__(self, data, k, distance="cosine", uuCF=0, normalize="none"):
         self.k = k
         self.ultility = data
 
-        self.supported_disc_func = ["cosine"]
+        self.__supported_disc_func = ["cosine", "pearson"]
 
-        assert distance in self.supported_disc_func, f"Distance function should be one of {self.supported_disc_func}"
+        assert distance in self.__supported_disc_func, f"Distance function should be one of {self.__supported_disc_func}"
         if distance == "cosine":
-            self.distance = self.__cosine
+            self.__distance = self.__cosine
+        elif distance == "pearson":
+            self.__distance = self.__pcc
 
-        self.baseline = baseline
         self.uuCF = uuCF
+
+        self.__normalize_method = ["none", "mean", "baseline"]
+        assert normalize in self.__normalize_method, f"Normalize method should be one of {self.__normalize_method}"
+        if normalize == "mean":
+            self.__normalize = self.__mean_normalize
+        elif normalize == "baseline":
+            self.__normalize = self.__baseline
+        else:
+            self.__normalize = False
 
         # Set up the similarity matrix
         if(uuCF):
@@ -39,10 +50,13 @@ class kNN:
     def fit(self):
         """Fit data (ultility matrix) into the model.
         """
-        self.__normalize()
+        if(self.__normalize):
+            print("Normalizing the utility matrix ...")
+            self.__normalize()
+            print("Done.")
 
         print('Computing similarity matrix ...')
-        self.distance()
+        self.__distance()
         print('Done.')
 
         # Convert to Compressed Sparse Row format for faster arithmetic operations.
@@ -100,7 +114,9 @@ class kNN:
 
             prediction = np.sum(sim * ratings) / (np.abs(sim).sum() + 1e-8)
 
-        return prediction + self.mu[u]
+        if (self.__normalize):
+            return prediction + self.mu[u]
+        return prediction
 
     def __recommend(self, u):
         """Determine all items should be recommended for user u. (uuCF =1)
@@ -179,9 +195,9 @@ class kNN:
     def __pcc(self, i, j):
         pass
 
-    def __normalize(self):
+    def __mean_normalize(self):
         """Normalize the ultility matrix.
-        For now, this method only normalize the data base on the mean of ratings.
+        This method only normalize the data base on the mean of ratings.
         Any unrated item will remain the same.
         """
         tot = np.array(self.ultility.sum(axis=1).squeeze())[0]
@@ -201,3 +217,6 @@ class kNN:
         # d*b = Mean matrix - a matrix with the means of each row at the non-zero position
         # Subtract the mean matrix to get the normalize data.
         self.ultility -= d*b
+
+    def __baseline(self):
+        pass
