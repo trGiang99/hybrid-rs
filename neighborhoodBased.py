@@ -30,18 +30,23 @@ class kNN:
         self.baseline = baseline
         self.uuCF = uuCF
 
+        # Set up the similarity matrix
         if(uuCF):
             self.S = sparse.lil_matrix((self.ultility.shape[0], self.ultility.shape[0]), dtype='float64')
         else:
             self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]), dtype='float64')
 
     def fit(self):
-        """Calculate the similarity matrix
+        """Fit data (ultility matrix) into the model.
         """
         self.__normalize()
-        self.distance()
 
-        self.S.tocsr()      # Convert to Compressed Sparse Row format for faster arithmetic operations.
+        print('Computing similarity matrix ...')
+        self.distance()
+        print('Done.')
+
+        # Convert to Compressed Sparse Row format for faster arithmetic operations.
+        self.S.tocsr()
 
     def predict(self, u, i):
         """Predict the rating of user u for item i
@@ -58,6 +63,7 @@ class kNN:
         if (self.uuCF):
             # Find users that have rated item i beside user u
             users_rated_i = self.ultility.getcol(i).nonzero()[0]
+            users_rated_i = users_rated_i[users_rated_i != u]
 
             sim = []
             for user_rated_i in users_rated_i:
@@ -72,11 +78,12 @@ class kNN:
             sim = sim[k_nearest_users]
             ratings = np.array([self.ultility[v, i] for v in users_rated_i[k_nearest_users]])
 
-            prediction = np.sum(sim * ratings) / (np.sum(sim) + 1e-8)
+            prediction = np.sum(sim * ratings) / (np.abs(sim).sum() + 1e-8)
         # Item based CF
         else:
             # Find items that have been rated by user u beside item i
             items_ratedby_u = self.ultility.getrow(u).nonzero()[1]
+            items_ratedby_u = items_ratedby_u[items_ratedby_u != i]
 
             sim = []
             for item_ratedby_u in items_ratedby_u:
@@ -91,9 +98,9 @@ class kNN:
             sim = sim[k_nearest_items]
             ratings = np.array([self.ultility[u, j] for j in items_ratedby_u[k_nearest_items]])
 
-            prediction = np.sum(sim * ratings) / (np.sum(sim) + 1e-8)
+            prediction = np.sum(sim * ratings) / (np.abs(sim).sum() + 1e-8)
 
-        return prediction
+        return prediction + self.mu[u]
 
     def __recommend(self, u):
         """Determine all items should be recommended for user u. (uuCF =1)
@@ -122,8 +129,8 @@ class kNN:
         n_test_ratings = test_data.shape[0]
 
         for n in range(n_test_ratings):
-            # print(f"Predicting {test_data['user_id'][n]},{test_data['item_id'][n]}")
             pred = self.predict(test_data["user_id"][n], test_data["item_id"][n])
+            # print(f"Predicting {test_data['user_id'][n]},{test_data['item_id'][n]}: {pred} - {test_data['rating'][n]}")
             squared_error += (pred - test_data["rating"][n])**2
 
         return np.sqrt(squared_error/n_test_ratings)
@@ -176,14 +183,13 @@ class kNN:
         """Normalize the ultility matrix
         """
         tot = np.array(self.ultility.sum(axis=1).squeeze())[0]
-        cts = np.array([self.ultility[k].count_nonzero() for k in range(self.ultility.shape[0])])
+        cts = np.diff(self.ultility.indptr)
+        cts[cts == 0] = 1       # Avoid dividing by 0 resulting nan.
 
-        mu = tot / cts
+        self.mu = tot / cts
 
-        d = sparse.diags(mu, 0)
+        d = sparse.diags(self.mu, 0)
         b = self.ultility.copy()
         b.data = np.ones_like(b.data)
 
         self.ultility -= d*b
-
-        print(self.ultility)
