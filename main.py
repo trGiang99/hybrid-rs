@@ -7,7 +7,7 @@ from neighborhoodBased import kNN
 
 print("\nReimlementation of KNN with mean normalization:")
 
-train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load()
+train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load_sparse()
 
 start_time = time.time()
 knn = kNN(data=train_data, k=5, distance="cosine", uuCF=1, normalize="mean")
