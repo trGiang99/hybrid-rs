@@ -14,7 +14,6 @@ class kNN:
             data: Training data
             k (int): Number of neibors use in prediction
             distance (str, optional): Distance function. Defaults to "cosine".
-            baseline (int, optional): Assign to 1 if using basline estimate, 0 if not. Defaults to 0.
             uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
             normalize (str, optional): Normalization method. Defaults to "none".
     """
