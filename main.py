@@ -5,12 +5,12 @@ from DataLoader import DataLoader
 from neighborhoodBased import kNN
 
 
-print("\nReimlementation of Basic KNN:")
+print("\nReimlementation of KNN with mean normalization:")
 
 train_data, test_data = DataLoader("movielens-sample", test_ratio=0.2).load()
 
 start_time = time.time()
-knn = kNN(data=train_data, k=5, distance="cosine", uuCF=1, normalize="none")
+knn = kNN(data=train_data, k=5, distance="cosine", uuCF=1, normalize="mean")
 knn.fit()
 print (f'RMSE: {knn.rmse(test_data)}')
 print(f'Runtime: {time.time() - start_time} seconds.')
