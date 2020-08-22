@@ -6,6 +6,8 @@ from math import sqrt
 from scipy import sparse
 from scipy.sparse.linalg import norm
 
+from utils import timer
+
 
 class kNN:
     """Reimplementation of kNN argorithm.
@@ -46,6 +48,7 @@ class kNN:
         else:
             self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]), dtype='float64')
 
+    @timer("Runtime: ")
     def fit(self):
         """Fit data (ultility matrix) into the model.
         """
