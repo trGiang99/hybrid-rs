@@ -6,7 +6,7 @@ from math import sqrt
 from scipy import sparse
 from scipy.sparse.linalg import norm
 
-from utils import timer
+from .utils import timer
 
 
 class kNN:
