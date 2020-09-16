@@ -1,8 +1,7 @@
 import numpy as np
-import time
 
-from DataLoader import DataLoader
-from neighborhoodBased import kNN
+from loader import DataLoader
+from svd_knn import kNN
 
 
 print("\nReimlementation of KNN with mean normalization:")
