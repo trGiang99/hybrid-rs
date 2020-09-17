@@ -1,12 +1,12 @@
 import pandas as pd
 import numpy as np
-
 from math import sqrt
 
 from scipy import sparse
 from scipy.sparse.linalg import norm
 
 from .utils import timer
+from .sim import _cosine, _pcc, _cosine_genome, _pcc_genome
 
 
 class kNN:
@@ -24,12 +24,8 @@ class kNN:
         self.ultility = data
 
         self.__supported_disc_func = ["cosine", "pearson"]
-
         assert distance in self.__supported_disc_func, f"Distance function should be one of {self.__supported_disc_func}"
-        if distance == "cosine":
-            self.__distance = self.__cosine
-        elif distance == "pearson":
-            self.__distance = self.__pcc
+        self.__distance = distance
 
         self.uuCF = uuCF
 
@@ -42,27 +38,25 @@ class kNN:
         else:
             self.__normalize = False
 
-        # Set up the similarity matrix
-        if(uuCF):
-            self.S = sparse.lil_matrix((self.ultility.shape[0], self.ultility.shape[0]), dtype='float64')
-        else:
-            self.S = sparse.lil_matrix((self.ultility.shape[1], self.ultility.shape[1]), dtype='float64')
-
     @timer("Runtime: ")
-    def fit(self):
+    def fit(self, genome=None):
         """Fit data (ultility matrix) into the model.
         """
         if(self.__normalize):
             print("Normalizing the utility matrix ...")
             self.__normalize()
-            print("Done.")
 
         print('Computing similarity matrix ...')
-        self.__distance()
-        print('Done.')
-
-        # Convert to Compressed Sparse Row format for faster arithmetic operations.
-        self.S.tocsr()
+        if self.__distance == "cosine":
+            if genome is not None:
+                self.S = _cosine_genome(genome)
+            else:
+                self.S = _cosine(self.ultility, self.uuCF)
+        elif self.__distance == "pearson":
+            if genome is not None:
+                self.S = _pcc_genome(genome)
+            else:
+                self.S = _pcc(self.ultility, self.uuCF)
 
     def predict(self, u, i):
         """Predict the rating of user u for item i
@@ -147,55 +141,10 @@ class kNN:
         n_test_ratings = test_data.shape[0]
 
         for n in range(n_test_ratings):
-            pred = self.predict(test_data["user_id"][n], test_data["item_id"][n])
-            # print(f"Predicting {test_data['user_id'][n]},{test_data['item_id'][n]}: {pred} - {test_data['rating'][n]}")
+            pred = self.predict(test_data["u_id"][n], test_data["i_id"][n])
             squared_error += (pred - test_data["rating"][n])**2
 
         return np.sqrt(squared_error/n_test_ratings)
-
-    def __cosine(self):
-        """Calculate cosine simularity score between object i and object j.
-        Object i and j could be item or user, but must be the same.
-        Assign the similarity score to self.S (similarity matrix).
-
-        Args:
-            i (int): index of object i
-            j (int): index of object j
-        """
-        # User based CF
-        if(self.uuCF):
-            users = np.unique(self.ultility.nonzero()[0])
-
-            for uidx, u in enumerate(users):
-                for v in users[(uidx+1):]:
-                    sum_ratings = self.ultility[u,:] * self.ultility[v,:].transpose()
-                    if (not sum_ratings):
-                        self.S[u,v] = 0
-                        continue
-
-                    norm2_ratings_u = norm(self.ultility[u,:], 'fro')
-                    norm2_ratings_v = norm(self.ultility[v,:], 'fro')
-
-                    self.S[u,v] = (sum_ratings / (norm2_ratings_u * norm2_ratings_v)).data[0]
-
-        # Item based CF
-        else:
-            items = np.unique(self.ultility.nonzero()[1])
-
-            for iidx, i in enumerate(items):
-                for j in items[(iidx+1):]:
-                    sum_ratings = self.ultility[:,i].transpose() * self.ultility[:,j]
-                    if (not sum_ratings):
-                        self.S[i,j] = 0
-                        continue
-
-                    norm2_ratings_i = norm(self.ultility[:,i], 'fro')
-                    norm2_ratings_j = norm(self.ultility[:,j], 'fro')
-
-                    self.S[i,j] = (sum_ratings / (norm2_ratings_i * norm2_ratings_j)).data[0]
-
-    def __pcc(self, i, j):
-        pass
 
     def __mean_normalize(self):
         """Normalize the ultility matrix.
