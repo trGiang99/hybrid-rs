@@ -80,20 +80,6 @@ class SVD:
 
         return X[['u_id', 'i_id', 'rating']].values
 
-    def _preprocess_genome(self, genome):
-        """Map items ids to indexes of genome data and return genome matrix.
-
-        Args:
-            genome (pandas DataFrame): genome Dataframe
-
-        Returns:
-            (numpy array): genome matrix
-        """
-        genome['i_id'] = genome['i_id'].map(self.item_dict)
-        genome.fillna(0, inplace=True)
-
-        return sparse.csr_matrix((genome['score'], (genome['i_id'], genome['g_id'])))[:,1:].toarray()
-
     def _sgd(self, X, X_val, pu, qi, bu, bi):
         """Performs SGD algorithm, learns model weights.
         Args:
@@ -176,7 +162,7 @@ class SVD:
         n_item = len(np.unique(X[:, 1]))
 
         if i_factor is not None:
-            qi = self._preprocess_genome(i_factor)
+            qi = i_factor
         else:
             qi = np.random.normal(0, .1, (n_item, self.n_factors))
 
