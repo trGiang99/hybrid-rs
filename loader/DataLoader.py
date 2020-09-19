@@ -58,8 +58,9 @@ class DataLoader:
 
         if use_val:
             self.__read_valset(columns)
-
-        return self.__train_data, self.__val_data, self.__test_data
+            return self.__train_data, self.__val_data, self.__test_data
+        else:
+            return self.__train_data, self.__test_data
 
     def load_genome_fromcsv(self, genome_file="genome_scores.csv", columns=["i_id", "g_id", "score"], reset_index=False):
         """
@@ -72,16 +73,21 @@ class DataLoader:
         Returns:
             scores (DataFrame)
         """
-        scores = pd.read_csv(
+        genome = pd.read_csv(
             self.__genome_folder + "/" + genome_file,
             header=0, names=columns
         )
 
         if reset_index:
-            tag_map = {genome.g_id: (newIdx+1) for newIdx, genome in scores.loc[scores.i_id == 1].iterrows()}
-            scores["g_id"] = scores["g_id"].map(tag_map)
+            tag_map = {genome.g_id: (newIdx+1) for newIdx, genome in genome.loc[genome.i_id == 1].iterrows()}
+            genome["g_id"] = genome["g_id"].map(tag_map)
 
-        return scores
+        item_map = {iIds: idx for idx, iIds in enumerate(np.sort(self.__train_data.i_id.unique()))}
+
+        genome['i_id'] = genome['i_id'].map(item_map)
+        genome.fillna(0, inplace=True)
+
+        return sparse.csr_matrix((genome['score'], (genome['i_id'], genome['g_id'])))[:,1:].toarray()
 
     def load_sparse(self):
         """Convert dataframe of training set to scipy.sparse matrix
