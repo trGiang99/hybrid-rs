@@ -46,11 +46,9 @@ def _run_epoch(X, pu, qi, bu, bi, S, k, global_mean, n_factors, lr_pu, lr_qi, lr
                 if i_id != item and u_id == user
         ])
 
-        sim = []
-        for item_ratedby_u in items_ratedby_u:
-            sim.append(S[item, item_ratedby_u]) if S[item, item_ratedby_u] else sim.append(S[item_ratedby_u, item])
-
-        sim = np.array(sim)
+        sim = np.array([
+            S[item, item_ratedby_u] if S[item, item_ratedby_u] else S[item_ratedby_u, item] for item_ratedby_u in items_ratedby_u
+        ])
 
         # Sort similarity list in descending and get k first indices
         k_nearest_items = np.argsort(sim)[-k:]
