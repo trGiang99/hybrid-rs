@@ -70,9 +70,9 @@ def _cosine_genome(genome):
     """
     S = np.zeros((genome.shape[0], genome.shape[0]))
 
-    for uidx, u in enumerate(genome):
-        for vidx, v in enumerate(genome[(uidx+1):]):
-            numerator = u.dot(v)
+    for uidx in range(genome.shape[0]):
+        for vidx in range(genome[(uidx+1):].shape[0]):
+            numerator = genome[uidx].dot(genome[vidx+uidx+1])
             if (not numerator):
                 S[uidx,vidx+uidx+1] = 0
                 continue
