@@ -19,7 +19,7 @@ def _cosine(U, uuCF):
     """
     # User based CF
     if(uuCF):
-        S = np.empty([U.shape[0], U.shape[0]])
+        S = np.zeros((U.shape[0], U.shape[0]))
         users = np.unique(U.nonzero()[0])
 
         for uidx, u in enumerate(users):
@@ -36,7 +36,7 @@ def _cosine(U, uuCF):
 
     # Item based CF
     else:
-        S = np.empty([U.shape[1], U.shape[1]])
+        S = np.zeros((U.shape[1], U.shape[1]))
         items = np.unique(U.nonzero()[1])
 
         for iidx, i in enumerate(items):
@@ -54,10 +54,10 @@ def _cosine(U, uuCF):
     return S
 
 def _pcc(U, uuCF):
-    S = np.empty([U.shape[0], U.shape[0]])
+    S = np.zeros((U.shape[0], U.shape[0]))
     return S
 
-# @njit
+@njit
 def _cosine_genome(genome):
     """Calculate cosine simularity score between each movie
     using movie genome provided by MovieLens20M dataset.
@@ -68,7 +68,7 @@ def _cosine_genome(genome):
     Returns:
         S (ndarray): Similarity matrix
     """
-    S = np.empty([genome.shape[0], genome.shape[0]])
+    S = np.zeros((genome.shape[0], genome.shape[0]))
 
     for uidx, u in enumerate(genome):
         for vidx, v in enumerate(genome[(uidx+1):]):
@@ -86,5 +86,5 @@ def _cosine_genome(genome):
 
 @njit
 def _pcc_genome(genome):
-    S = np.empty([genome.shape[0], genome.shape[0]])
+    S = np.zeros((genome.shape[0], genome.shape[0]))
     return S
