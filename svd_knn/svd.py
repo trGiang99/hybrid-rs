@@ -6,10 +6,10 @@ import time
 import pickle
 
 from .utils import timer
-from .helper import _run_epoch, _compute_val_metrics, _shuffle
+from .svd_helper import _run_epoch, _compute_val_metrics, _shuffle
 
 
-class SVD:
+class svd:
     """Implements Simon Funk SVD algorithm engineered during the Netflix Prize.
     Attributes:
         lr (float): learning rate.
@@ -63,11 +63,8 @@ class SVD:
         X = X.copy()
 
         if train:
-            u_ids = X['u_id'].unique().tolist()
-            i_ids = X['i_id'].unique().tolist()
-
-            self.user_dict = dict(zip(u_ids, list(range(len(u_ids)))))
-            self.item_dict = dict(zip(i_ids, list(range(len(i_ids)))))
+            self.user_dict = {uIds: idx for idx, uIds in enumerate(np.sort(X['u_id'].unique()))}
+            self.item_dict = {iIds: idx for idx, iIds in enumerate(np.sort(X['i_id'].unique()))}
 
         X['u_id'] = X['u_id'].map(self.user_dict)
         X['i_id'] = X['i_id'].map(self.item_dict)
