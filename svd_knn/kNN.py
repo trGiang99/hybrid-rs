@@ -13,15 +13,13 @@ class kNN:
     """Reimplementation of kNN argorithm.
 
     Args:
-            data: Training data
             k (int): Number of neibors use in prediction
             distance (str, optional): Distance function. Defaults to "cosine".
             uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
             normalize (str, optional): Normalization method. Defaults to "none".
     """
-    def __init__(self, data, k, distance="cosine", uuCF=0, normalize="none"):
+    def __init__(self, k, distance="cosine", uuCF=0, normalize="none"):
         self.k = k
-        self.ultility = data
 
         self.__supported_disc_func = ["cosine", "pearson"]
         assert distance in self.__supported_disc_func, f"Distance function should be one of {self.__supported_disc_func}"
@@ -39,9 +37,14 @@ class kNN:
             self.__normalize = False
 
     @timer("Runtime: ")
-    def fit(self, genome=None):
+    def fit(self, train_data, genome=None):
         """Fit data (ultility matrix) into the model.
+
+        Args:
+            data (scipy.sparse.csr_matrix): Training data.
+            genome (ndarray): Movie genome scores from MovieLens 20M.
         """
+        self.ultility = train_data
         if(self.__normalize):
             print("Normalizing the utility matrix ...")
             self.__normalize()
