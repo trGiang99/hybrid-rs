@@ -41,23 +41,16 @@ def _run_epoch(X, pu, qi, bu, bi, S, k, global_mean, n_factors, lr_pu, lr_qi, lr
             pred += pu[user, factor] * qi[item, factor]
 
         # Find items that have been rated by user u beside item i and their ratings
-        # items_ratedby_u = np.array([
-        #     [int(i_id), rating_u] for i_id, u_id, rating_u in zip(X[:,1], X[:,0], X[:,2])
-        #         if i_id != item and u_id == user
-        # ])
-        # sim_ratings = items_ratedby_u[:,1]
-        # items_ratedby_u = items_ratedby_u[:,0]
-
-        items_ratedby_u = []
-        sim_ratings = []
+        list_items_ratedby_u = []
+        list_sim_ratings = []
         for i_id, u_id, rating_u in zip(X[:,1], X[:,0], X[:,2]):
             if i_id != item and u_id == user:
-                items_ratedby_u.append(int(i_id))
-                sim_ratings.append(rating_u)
-        items_ratedby_u = np.array(items_ratedby_u)
-        sim_ratings = np.array(sim_ratings)
+                list_items_ratedby_u.append(int(i_id))
+                list_sim_ratings.append(rating_u)
+        items_ratedby_u = np.array(list_items_ratedby_u)
+        sim_ratings = np.array(list_sim_ratings)
 
-
+        # Get similarity score to items that are also rated by user u
         sim = np.array([
             S[item, item_ratedby_u] if S[item, item_ratedby_u] else S[item_ratedby_u, item] for item_ratedby_u in items_ratedby_u
         ])
@@ -68,11 +61,6 @@ def _run_epoch(X, pu, qi, bu, bi, S, k, global_mean, n_factors, lr_pu, lr_qi, lr
         # Get first k items or all if number of similar items smaller than k
         sim = sim[k_nearest_items]
         sim_ratings = sim_ratings[k_nearest_items] - pred
-        # sim_ratings = np.array([
-        #     X[np.where((X[:,1] == j) & (X[:,0] == user))[0][0], 2] for j in items_ratedby_u[k_nearest_items]
-        # ])
-
-        # sim_ratings -= pred
 
         pred += np.sum(sim * sim_ratings) / (np.abs(sim).sum() + 1e-8)
 
