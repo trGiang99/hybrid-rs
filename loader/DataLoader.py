@@ -87,7 +87,7 @@ class DataLoader:
         genome['i_id'] = genome['i_id'].map(item_map)
         genome.fillna(0, inplace=True)
 
-        return sparse.csr_matrix((genome['score'], (genome['i_id'], genome['g_id'])))[:,1:].toarray()
+        return sparse.csr_matrix((genome['score'], (genome['i_id'].astype(int), genome['g_id'].astype(int))))[:,1:].toarray()
 
     def load_sparse(self):
         """Convert dataframe of training set to scipy.sparse matrix
@@ -99,6 +99,12 @@ class DataLoader:
         self.__read_trainset(columns)
         self.__read_testset(columns)
 
+        item_map = {iIds: idx for idx, iIds in enumerate(np.sort(self.__train_data.i_id.unique()))}
+        user_map = {uIds: idx for idx, uIds in enumerate(np.sort(self.__train_data.u_id.unique()))}
+
+        self.__train_data['u_id'] = self.__train_data['u_id'].map(user_map)
+        self.__train_data['i_id'] = self.__train_data['i_id'].map(item_map)
+
         train_data = sparse.csr_matrix((
             self.__train_data["rating"],
             (self.__train_data["u_id"], self.__train_data["i_id"])
@@ -106,5 +112,9 @@ class DataLoader:
 
         # Reset the index of test_data dataframe to 0
         self.__test_data.reset_index(drop=True, inplace=True)
+        self.__test_data['u_id'] = self.__test_data['u_id'].map(user_map)
+        self.__test_data['i_id'] = self.__test_data['i_id'].map(item_map)
+        # Tag unknown users/items with -1 (when val)
+        self.__test_data.fillna(-1, inplace=True)
 
         return train_data, self.__test_data
