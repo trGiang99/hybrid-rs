@@ -104,16 +104,16 @@ def _get_simratings_tensor(X, S, k):
                 # Get similarity score to items that are also rated by user u
                 list_sims.append(S[item, item_ratedby_u] if S[item, item_ratedby_u] else S[item_ratedby_u, item])
                 list_ratings.append(rating_u)
-        list_index = np.array(list_index)
-        list_sims = np.array(list_sims)
-        list_ratings = np.array(list_ratings)
+        indices = np.array(list_index)
+        sims = np.array(list_sims)
+        ratings = np.array(list_ratings)
 
         # Sort similarity list in descending and get k first indices
-        k_nearest_items = np.argsort(list_sims)[-k:]
+        k_nearest_items = np.argsort(sims)[-k:]
 
         # Get first k items or all if number of similar items smaller than k
-        sim_ratings[train_index, 0] = list_index[k_nearest_items]
-        sim_ratings[train_index, 1] = list_sims[k_nearest_items]
-        sim_ratings[train_index, 2] = list_ratings[k_nearest_items]
+        sim_ratings[train_index, 0] = indices[k_nearest_items]
+        sim_ratings[train_index, 1] = sims[k_nearest_items]
+        sim_ratings[train_index, 2] = ratings[k_nearest_items]
 
     return sim_ratings
