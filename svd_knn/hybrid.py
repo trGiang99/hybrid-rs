@@ -17,14 +17,10 @@ class hybrid(svd, kNN):
         kNN.__init__(self, **knn_options)
 
     def fit(self, train_data, movie_genome=None, user_genome=None, early_stopping=False, shuffle=False, min_delta=0.001):
-        train_data_sparse = sparse.csr_matrix((
-            train_data["rating"],
-            (train_data["u_id"], train_data["i_id"])
-        ))
-        kNN.fit(self, train_data=train_data_sparse, genome=movie_genome)
+        kNN.fit(self, train_data=None, genome=movie_genome)
 
         self.__fit_svd_with_knn(
-            X=train_data,
+            train_data=train_data,
             S=self.S,
             k=self.k,
             i_factor=movie_genome,
@@ -34,13 +30,11 @@ class hybrid(svd, kNN):
         )
 
     @timer(text='\nTraining took ')
-    def __fit_svd_with_knn(self, X, X_val=None, S=None, k=None, i_factor=None, u_factor=None, early_stopping=False, min_delta=0.001):
+    def __fit_svd_with_knn(self, train_data, S=None, k=None, i_factor=None, u_factor=None, early_stopping=False, min_delta=0.001):
         """Learns model weights using SGD algorithm.
         Args:
             X (pandas DataFrame): training set, must have `u_id` for user id,
                 `i_id` for item id and `rating` columns.
-            X_val (pandas DataFrame, defaults to `None`): validation set with
-                same structure as X.
             S (numpy array): similarity matrix.
             k (int): k nearest neighbors.
             i_factor (pandas DataFrame, defaults to `None`): initialization for Qi. The dimension should match self.factor
@@ -56,10 +50,7 @@ class hybrid(svd, kNN):
         self.min_delta_ = min_delta
 
         print('\nPreprocessing data...')
-        X = self._preprocess_data(X)
-        if X_val is not None:
-            self.metrics_ = np.zeros((self.n_epochs, 3), dtype=np.float)
-            X_val = self._preprocess_data(X_val, train=False)
+        X = self._preprocess_data(train_data)
 
         self.global_mean = np.mean(X[:, 2])
 
