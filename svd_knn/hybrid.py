@@ -6,7 +6,7 @@ from .utils import timer
 
 from .kNN import kNN
 from .svd import svd
-from .helper import _run_epoch, _shuffle
+from .helper import _run_epoch, _get_simratings_tensor
 
 
 class hybrid(svd, kNN):
@@ -22,7 +22,6 @@ class hybrid(svd, kNN):
             (train_data["u_id"], train_data["i_id"])
         ))
         kNN.fit(self, train_data=train_data_sparse, genome=movie_genome)
-        # kNN calculate the similarity matrix self.S
 
         self.__fit_svd_with_knn(
             X=train_data,
@@ -30,12 +29,12 @@ class hybrid(svd, kNN):
             k=self.k,
             i_factor=movie_genome,
             u_factor=user_genome,
-            early_stopping=early_stopping, shuffle=shuffle,
+            early_stopping=early_stopping,
             min_delta=min_delta
         )
 
     @timer(text='\nTraining took ')
-    def __fit_svd_with_knn(self, X, X_val=None, S=None, k=None, i_factor=None, u_factor=None, early_stopping=False, shuffle=False, min_delta=0.001):
+    def __fit_svd_with_knn(self, X, X_val=None, S=None, k=None, i_factor=None, u_factor=None, early_stopping=False, min_delta=0.001):
         """Learns model weights using SGD algorithm.
         Args:
             X (pandas DataFrame): training set, must have `u_id` for user id,
@@ -48,15 +47,12 @@ class hybrid(svd, kNN):
             u_factor (pandas DataFrame, defaults to `None`): initialization for Pu. The dimension should match self.factor
             early_stopping (boolean): whether or not to stop training based on
                 a validation monitoring.
-            shuffle (boolean): whether or not to shuffle the training set
-                before each epoch.
             min_delta (float, defaults to .001): minimun delta to arg for an
                 improvement.
         Returns:
             self (SVD object): the current fitted object.
         """
         self.early_stopping = early_stopping
-        self.shuffle = shuffle
         self.min_delta_ = min_delta
 
         print('\nPreprocessing data...')
@@ -84,15 +80,14 @@ class hybrid(svd, kNN):
         bu = np.zeros(n_user)
         bi = np.zeros(n_item)
 
+        sim_ratings = _get_simratings_tensor(X, self.S, self.k)
+
         print('Start training...')
         for epoch_ix in range(self.n_epochs):
             start = self._on_epoch_begin(epoch_ix)
 
-            if self.shuffle:
-                X = _shuffle(X)
-
             pu, qi, bu, bi, train_loss = _run_epoch(
-                                X, pu, qi, bu, bi, self.S, self.k, self.global_mean, self.n_factors,
+                                X, pu, qi, bu, bi, sim_ratings, self.global_mean, self.n_factors,
                                 self.lr_pu, self.lr_qi, self.lr_bu, self.lr_bi,
                                 self.reg_pu, self.reg_qi, self.reg_bu, self.reg_bi
                             )
