@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy import sparse
+import time
 
 from .utils import timer
 
@@ -71,7 +72,11 @@ class hybrid(svd, kNN):
         bu = np.zeros(n_user)
         bi = np.zeros(n_item)
 
+        print("Getting similarity scores and true ratings for each training point.")
+        start_cal_sim = time.time()
         sim_ratings = _get_simratings_tensor(X, self.S, self.k)
+        finish_cal_sim = time.time()
+        print(f"Done. Took {finish_cal_sim - start_cal_sim}s")
 
         print('Start training...')
         for epoch_ix in range(self.n_epochs):
