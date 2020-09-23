@@ -112,8 +112,9 @@ def _get_simratings_tensor(X, S, k):
         k_nearest_items = np.argsort(sims)[-k:]
 
         # Get first k items or all if number of similar items smaller than k
-        sim_ratings[train_index, 0] = indices[k_nearest_items]
-        sim_ratings[train_index, 1] = sims[k_nearest_items]
-        sim_ratings[train_index, 2] = ratings[k_nearest_items]
+        for idx, k_nearest_item in enumerate(k_nearest_items):
+            sim_ratings[train_index, 0, idx] = indices[k_nearest_item]
+            sim_ratings[train_index, 1, idx] = sims[k_nearest_item]
+            sim_ratings[train_index, 2, idx] = ratings[k_nearest_item]
 
     return sim_ratings
