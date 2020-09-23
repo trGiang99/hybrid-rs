@@ -54,20 +54,20 @@ def _run_epoch(X, pu, qi, bu, bi, sim_ratings, global_mean, n_factors, lr_pu, lr
     pred = temp_pred
 
     err = X[:,2] - pred
+    mean_error = err.mean()
 
-    for i in range(X.shape[0]):
-        user, item = int(X[i, 0]), int(X[i, 1])
-        # Update biases
-        bu[user] += lr_bu * (err[i] - reg_bu * bu[user])
-        bi[item] += lr_bi * (err[i] - reg_bi * bi[item])
+    user, item = int(X[i, 0]), int(X[i, 1])
+    # Update biases
+    bu[user] += lr_bu * (mean_error - reg_bu * bu[user])
+    bi[item] += lr_bi * (mean_error - reg_bi * bi[item])
 
-        # Update latent factors
-        for factor in range(n_factors):
-            puf = pu[user, factor]
-            qif = qi[item, factor]
+    # Update latent factors
+    for factor in range(n_factors):
+        puf = pu[user, factor]
+        qif = qi[item, factor]
 
-            pu[user, factor] += lr_pu * (err[i] * qif - reg_pu * puf)
-            qi[item, factor] += lr_qi * (err[i] * puf - reg_qi * qif)
+        pu[user, factor] += lr_pu * (mean_error * qif - reg_pu * puf)
+        qi[item, factor] += lr_qi * (mean_error * puf - reg_qi * qif)
 
     train_loss = np.square(err).mean()
     return pu, qi, bu, bi, train_loss
