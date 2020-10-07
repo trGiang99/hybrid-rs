@@ -9,7 +9,7 @@ def _shuffle(X):
 
 
 @njit
-def _run_epoch(X, pu, qi, bu, bi, sim_ratings, global_mean, n_factors, lr_pu, lr_qi, lr_bu, lr_bi, reg_pu, reg_qi, reg_bu, reg_bi):
+def _run_epoch(X, pu, qi, bu, bi, simratings_tensor, global_mean, n_factors, lr_pu, lr_qi, lr_bu, lr_bi, reg_pu, reg_qi, reg_bu, reg_bi):
     """Runs an epoch, updating model weights (pu, qi, bu, bi).
     Using Gradient Descent instead of Stochastic Gradient Descent.
     Args:
@@ -43,13 +43,14 @@ def _run_epoch(X, pu, qi, bu, bi, sim_ratings, global_mean, n_factors, lr_pu, lr
         for factor in range(n_factors):
             pred[i] += pu[user, factor] * qi[item, factor]
 
-    # Predict ratings by intergrating KNN into SVD
+    # Fine-tune predicted ratings by intergrating KNN into SVD
     temp_pred = np.zeros_like(pred)
     for idx in range(pred.shape[0]):
-        indices = sim_ratings[idx, 0, :]
-        sim_scores = sim_ratings[idx, 1, :]
-        ratings = sim_ratings[idx, 2, :]
+        indices = simratings_tensor[idx, 0, :]
+        sim_scores = simratings_tensor[idx, 1, :]
+        ratings = simratings_tensor[idx, 2, :]
         temp_k_pred = np.array([pred[int(i)] for i in indices])
+
         temp_pred[idx] = pred[idx] + (np.sum(sim_scores * (ratings - temp_k_pred)) / (np.abs(sim_scores).sum() + 1e-8))
     pred = temp_pred
 
@@ -84,12 +85,12 @@ def _get_simratings_tensor(X, S, k):
         k (int): k nearest neighbors
 
     Returns:
-        sim_ratings (ndarray): Tensor contains all needed information.
+        simratings_tensor (ndarray): Tensor contains all needed information.
                                First column: index of the rating in third corresponding to the training set
                                Second column: similarity scores of k most similar items to item i_id rated by user u_id
                                Third column: the ratings of of k most similar items to item i_id rated by user u_id
     """
-    sim_ratings = np.zeros((X.shape[0], 3, k))
+    simratings_tensor = np.zeros((X.shape[0], 3, k))
 
     for train_index in range(X.shape[0]):
         user, item = int(X[train_index, 0]), int(X[train_index, 1])
@@ -113,8 +114,8 @@ def _get_simratings_tensor(X, S, k):
 
         # Get first k items or all if number of similar items smaller than k
         for idx, k_nearest_item in enumerate(k_nearest_items):
-            sim_ratings[train_index, 0, idx] = indices[k_nearest_item]
-            sim_ratings[train_index, 1, idx] = sims[k_nearest_item]
-            sim_ratings[train_index, 2, idx] = ratings[k_nearest_item]
+            simratings_tensor[train_index, 0, idx] = indices[k_nearest_item]
+            simratings_tensor[train_index, 1, idx] = sims[k_nearest_item]
+            simratings_tensor[train_index, 2, idx] = ratings[k_nearest_item]
 
-    return sim_ratings
+    return simratings_tensor
