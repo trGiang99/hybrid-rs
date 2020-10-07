@@ -47,45 +47,33 @@ class hybrid(svd, kNN):
         Returns:
             self (SVD object): the current fitted object.
         """
-        self.early_stopping = early_stopping
-        self.min_delta_ = min_delta
+        svd.fit(self,
+            X=train_data,
+            i_factor=i_factor,
+            u_factor=u_factor,
+            early_stopping=False, shuffle=False
+        )
 
-        print('\nPreprocessing data...')
-        X = self._preprocess_data(train_data)
-
-        self.global_mean = np.mean(X[:, 2])
-
-        # Initialize pu, qi, bu, bi
-        n_user = len(np.unique(X[:, 0]))
-        n_item = len(np.unique(X[:, 1]))
-
-        if i_factor is not None:
-            qi = i_factor
-        else:
-            qi = np.random.normal(0, .1, (n_item, self.n_factors))
-
-        if u_factor is not None:
-            pu = u_factor
-        else:
-            pu = np.random.normal(0, .1, (n_user, self.n_factors))
-
-        bu = np.zeros(n_user)
-        bi = np.zeros(n_item)
-
+        X = self._preprocess_data(train_data, train=False)
         print("Getting similarity scores and true ratings for each training point.")
         start_cal_sim = time.time()
-        sim_ratings = _get_simratings_tensor(X, self.S, self.k)
+        self.simratings_tensor = _get_simratings_tensor(X, self.S, self.k)
         finish_cal_sim = time.time()
-        print(f"Done. Took {finish_cal_sim - start_cal_sim}s")
+        print(f"Done. Took {(finish_cal_sim - start_cal_sim):.4f}s")
 
-        print('Start training...')
+        pu = self.pu
+        qi = self.qi
+        bu = self.bu
+        bi = self.bi
+
+        print('Start training with KNN...')
         for epoch_ix in range(self.n_epochs):
             start = self._on_epoch_begin(epoch_ix)
 
             pu, qi, bu, bi, train_loss = _run_epoch(
-                                X, pu, qi, bu, bi, sim_ratings, self.global_mean, self.n_factors,
-                                self.lr_pu, self.lr_qi, self.lr_bu, self.lr_bi,
-                                self.reg_pu, self.reg_qi, self.reg_bu, self.reg_bi
+                                X, pu, qi, bu, bi, self.simratings_tensor, self.global_mean, self.n_factors,
+                                self.lr_pu/10, self.lr_qi/10, self.lr_bu/10, self.lr_bi/10,
+                                self.reg_pu/10, self.reg_qi/10, self.reg_bu/10, self.reg_bi/10
                             )
             self._on_epoch_end(start, train_loss=train_loss)
 
@@ -116,9 +104,9 @@ class hybrid(svd, kNN):
         predictions = []
 
         if mode == "train":
-            X = self._preprocess_data(train_data)
+            X = self._preprocess_data(train_data, train="False")
         else:
-            X = self._preprocess_data(pd.concat([train_data, test_data]))
+            X = self._preprocess_data(pd.concat([train_data, test_data]), train="False")
 
         for u_id, i_id in zip(test_data['u_id'], test_data['i_id']):
             user_known, item_known = False, False
@@ -139,7 +127,7 @@ class hybrid(svd, kNN):
 
                 # Find items that have been rated by user u beside item i
                 items_ratedby_u = np.array([
-                    int(item) for item, user in zip(X[:,1], X[:,0])
+                    int(item) for user, item in zip(X[:,0], X[:,1])
                         if item != i_ix and user == u_ix
                 ])
 
