@@ -3,10 +3,10 @@ import pandas as pd
 from scipy import sparse
 import time
 
-from .utils import timer
+from utils import timer
 
-from .kNN import kNN
-from .svd import svd
+from knn import kNN
+from svd import svd
 from .helper import _run_epoch, _get_simratings_tensor
 
 
