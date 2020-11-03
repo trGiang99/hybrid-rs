@@ -5,7 +5,7 @@ from scipy import sparse
 import time
 import pickle
 
-from .utils import timer
+from utils import timer
 from .svd_helper import _run_epoch, _compute_val_metrics, _shuffle
 
 
