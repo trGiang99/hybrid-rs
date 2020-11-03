@@ -9,8 +9,9 @@ def _shuffle(X):
 
 
 @njit
-def _run_epoch(X, pu, qi, bu, bi, S, k, global_mean, n_factors, lr_pu, lr_qi, lr_bu, lr_bi, reg_pu, reg_qi, reg_bu, reg_bi):
+def _run_epoch(X, pu, qi, bu, bi, simratings_tensor, global_mean, n_factors, lr_pu, lr_qi, lr_bu, lr_bi, reg_pu, reg_qi, reg_bu, reg_bi):
     """Runs an epoch, updating model weights (pu, qi, bu, bi).
+    Using Gradient Descent instead of Stochastic Gradient Descent.
     Args:
         X (numpy array): training set.
         pu (numpy array): users latent factor matrix.
@@ -30,56 +31,91 @@ def _run_epoch(X, pu, qi, bu, bi, S, k, global_mean, n_factors, lr_pu, lr_qi, lr
         bi (numpy array): items biases vector updated.
         train_loss (float): training loss.
     """
-    residuals = []
+    pred = np.zeros(X.shape[0])
+
+    # Predict all existing ratings in the training set using SVD fomular
     for i in range(X.shape[0]):
-        user, item, rating = int(X[i, 0]), int(X[i, 1]), X[i, 2]
+        user, item = int(X[i, 0]), int(X[i, 1])
 
         # Predict current rating
-        pred = global_mean + bu[user] + bi[item]
+        pred[i] = global_mean + bu[user] + bi[item]
 
         for factor in range(n_factors):
-            pred += pu[user, factor] * qi[item, factor]
+            pred[i] += pu[user, factor] * qi[item, factor]
 
-        # Find items that have been rated by user u beside item i
-        items_ratedby_u = np.array([
-            int(i_id) for i_id, u_id in zip(X[:,1], X[:,0])
-                if i_id != item and u_id == user
-        ])
+    # Fine-tune predicted ratings by intergrating KNN into SVD
+    temp_pred = np.zeros_like(pred)
+    for idx in range(pred.shape[0]):
+        indices = simratings_tensor[idx, 0, :]
+        sim_scores = simratings_tensor[idx, 1, :]
+        ratings = simratings_tensor[idx, 2, :]
+        temp_k_pred = np.array([pred[int(i)] for i in indices])
 
-        sim = []
-        for item_ratedby_u in items_ratedby_u:
-            sim.append(S[item, item_ratedby_u]) if S[item, item_ratedby_u] else sim.append(S[item_ratedby_u, item])
+        temp_pred[idx] = pred[idx] + (np.sum(sim_scores * (ratings - temp_k_pred)) / (np.abs(sim_scores).sum() + 1e-8))
+    pred = temp_pred
 
-        sim = np.array(sim)
+    err = X[:,2] - pred
+    mean_error = err.mean()
+
+    user, item = int(X[i, 0]), int(X[i, 1])
+    # Update biases
+    bu[user] += lr_bu * (mean_error - reg_bu * bu[user])
+    bi[item] += lr_bi * (mean_error - reg_bi * bi[item])
+
+    # Update latent factors
+    for factor in range(n_factors):
+        puf = pu[user, factor]
+        qif = qi[item, factor]
+
+        pu[user, factor] += lr_pu * (mean_error * qif - reg_pu * puf)
+        qi[item, factor] += lr_qi * (mean_error * puf - reg_qi * qif)
+
+    train_loss = np.square(err).mean()
+    return pu, qi, bu, bi, train_loss
+
+
+@njit
+def _get_simratings_tensor(X, S, k):
+    """Get all similarity scores and ratings of similar item for
+    every (user, item) pair in the training set.
+
+    Args:
+        X (ndarray): training set
+        S (ndarray): similarity matrix
+        k (int): k nearest neighbors
+
+    Returns:
+        simratings_tensor (ndarray): Tensor contains all needed information.
+                               First column: index of the rating in third corresponding to the training set
+                               Second column: similarity scores of k most similar items to item i_id rated by user u_id
+                               Third column: the ratings of of k most similar items to item i_id rated by user u_id
+    """
+    simratings_tensor = np.zeros((X.shape[0], 3, k))
+
+    for train_index in range(X.shape[0]):
+        user, item = int(X[train_index, 0]), int(X[train_index, 1])
+
+        list_index = []
+        list_sims = []
+        list_ratings = []
+        for u_id, i_id, rating_u in zip(X[:,0], X[:,1], X[:,2]):
+            if i_id != item and u_id == user:
+                item_ratedby_u = int(i_id)
+                list_index.append(item_ratedby_u)
+                # Get similarity score to items that are also rated by user u
+                list_sims.append(S[item, item_ratedby_u] if S[item, item_ratedby_u] else S[item_ratedby_u, item])
+                list_ratings.append(rating_u)
+        indices = np.array(list_index)
+        sims = np.array(list_sims)
+        ratings = np.array(list_ratings)
 
         # Sort similarity list in descending and get k first indices
-        k_nearest_items = np.argsort(sim)[-k:]
+        k_nearest_items = np.argsort(sims)[-k:]
 
         # Get first k items or all if number of similar items smaller than k
-        sim = sim[k_nearest_items]
-        sim_ratings = np.array([
-            X[np.where((X[:,1] == j) & (X[:,0] == user))[0][0], 2] for j in items_ratedby_u[k_nearest_items]
-        ])
+        for idx, k_nearest_item in enumerate(k_nearest_items):
+            simratings_tensor[train_index, 0, idx] = indices[k_nearest_item]
+            simratings_tensor[train_index, 1, idx] = sims[k_nearest_item]
+            simratings_tensor[train_index, 2, idx] = ratings[k_nearest_item]
 
-        sim_ratings -= pred
-
-        pred += np.sum(sim * sim_ratings) / (np.abs(sim).sum() + 1e-8)
-
-        err = rating - pred
-        residuals.append(err)
-
-        # Update biases
-        bu[user] += lr_bu * (err - reg_bu * bu[user])
-        bi[item] += lr_bi * (err - reg_bi * bi[item])
-
-        # Update latent factors
-        for factor in range(n_factors):
-            puf = pu[user, factor]
-            qif = qi[item, factor]
-
-            pu[user, factor] += lr_pu * (err * qif - reg_pu * puf)
-            qi[item, factor] += lr_qi * (err * puf - reg_qi * qif)
-
-    residuals = np.array(residuals)
-    train_loss = np.square(residuals).mean()
-    return pu, qi, bu, bi, train_loss
+    return simratings_tensor

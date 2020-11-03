@@ -1,12 +1,13 @@
 import numpy as np
 import pandas as pd
 from scipy import sparse
+import time
 
 from .utils import timer
 
 from .kNN import kNN
 from .svd import svd
-from .helper import _run_epoch, _shuffle
+from .helper import _run_epoch, _get_simratings_tensor
 
 
 class hybrid(svd, kNN):
@@ -17,84 +18,62 @@ class hybrid(svd, kNN):
         kNN.__init__(self, **knn_options)
 
     def fit(self, train_data, movie_genome=None, user_genome=None, early_stopping=False, shuffle=False, min_delta=0.001):
-        train_data_sparse = sparse.csr_matrix((
-            train_data["rating"],
-            (train_data["u_id"], train_data["i_id"])
-        ))
-        kNN.fit(self, train_data=train_data_sparse, genome=movie_genome)
-        # kNN calculate the similarity matrix self.S
+        kNN.fit(self, train_data=None, genome=movie_genome)
 
         self.__fit_svd_with_knn(
-            X=train_data,
+            train_data=train_data,
             S=self.S,
             k=self.k,
             i_factor=movie_genome,
             u_factor=user_genome,
-            early_stopping=early_stopping, shuffle=shuffle,
+            early_stopping=early_stopping,
             min_delta=min_delta
         )
 
     @timer(text='\nTraining took ')
-    def __fit_svd_with_knn(self, X, X_val=None, S=None, k=None, i_factor=None, u_factor=None, early_stopping=False, shuffle=False, min_delta=0.001):
+    def __fit_svd_with_knn(self, train_data, S=None, k=None, i_factor=None, u_factor=None, early_stopping=False, min_delta=0.001):
         """Learns model weights using SGD algorithm.
         Args:
             X (pandas DataFrame): training set, must have `u_id` for user id,
                 `i_id` for item id and `rating` columns.
-            X_val (pandas DataFrame, defaults to `None`): validation set with
-                same structure as X.
             S (numpy array): similarity matrix.
             k (int): k nearest neighbors.
             i_factor (pandas DataFrame, defaults to `None`): initialization for Qi. The dimension should match self.factor
             u_factor (pandas DataFrame, defaults to `None`): initialization for Pu. The dimension should match self.factor
             early_stopping (boolean): whether or not to stop training based on
                 a validation monitoring.
-            shuffle (boolean): whether or not to shuffle the training set
-                before each epoch.
             min_delta (float, defaults to .001): minimun delta to arg for an
                 improvement.
         Returns:
             self (SVD object): the current fitted object.
         """
-        self.early_stopping = early_stopping
-        self.shuffle = shuffle
-        self.min_delta_ = min_delta
+        svd.fit(self,
+            X=train_data,
+            i_factor=i_factor,
+            u_factor=u_factor,
+            early_stopping=False, shuffle=False
+        )
 
-        print('\nPreprocessing data...')
-        X = self._preprocess_data(X)
-        if X_val is not None:
-            self.metrics_ = np.zeros((self.n_epochs, 3), dtype=np.float)
-            X_val = self._preprocess_data(X_val, train=False)
+        X = self._preprocess_data(train_data, train=False)
+        print("Getting similarity scores and true ratings for each training point.")
+        start_cal_sim = time.time()
+        self.simratings_tensor = _get_simratings_tensor(X, self.S, self.k)
+        finish_cal_sim = time.time()
+        print(f"Done. Took {(finish_cal_sim - start_cal_sim):.4f}s")
 
-        self.global_mean = np.mean(X[:, 2])
+        pu = self.pu
+        qi = self.qi
+        bu = self.bu
+        bi = self.bi
 
-        # Initialize pu, qi, bu, bi
-        n_user = len(np.unique(X[:, 0]))
-        n_item = len(np.unique(X[:, 1]))
-
-        if i_factor is not None:
-            qi = i_factor
-        else:
-            qi = np.random.normal(0, .1, (n_item, self.n_factors))
-
-        if u_factor is not None:
-            pu = u_factor
-        else:
-            pu = np.random.normal(0, .1, (n_user, self.n_factors))
-
-        bu = np.zeros(n_user)
-        bi = np.zeros(n_item)
-
-        print('Start training...')
+        print('Start training with KNN...')
         for epoch_ix in range(self.n_epochs):
             start = self._on_epoch_begin(epoch_ix)
 
-            if self.shuffle:
-                X = _shuffle(X)
-
             pu, qi, bu, bi, train_loss = _run_epoch(
-                                X, pu, qi, bu, bi, self.S, self.k, self.global_mean, self.n_factors,
-                                self.lr_pu, self.lr_qi, self.lr_bu, self.lr_bi,
-                                self.reg_pu, self.reg_qi, self.reg_bu, self.reg_bi
+                                X, pu, qi, bu, bi, self.simratings_tensor, self.global_mean, self.n_factors,
+                                self.lr_pu/10, self.lr_qi/10, self.lr_bu/10, self.lr_bi/10,
+                                self.reg_pu/10, self.reg_qi/10, self.reg_bu/10, self.reg_bi/10
                             )
             self._on_epoch_end(start, train_loss=train_loss)
 
@@ -125,9 +104,9 @@ class hybrid(svd, kNN):
         predictions = []
 
         if mode == "train":
-            X = self._preprocess_data(train_data)
+            X = self._preprocess_data(train_data, train="False")
         else:
-            X = self._preprocess_data(pd.concat([train_data, test_data]))
+            X = self._preprocess_data(pd.concat([train_data, test_data]), train="False")
 
         for u_id, i_id in zip(test_data['u_id'], test_data['i_id']):
             user_known, item_known = False, False
@@ -148,7 +127,7 @@ class hybrid(svd, kNN):
 
                 # Find items that have been rated by user u beside item i
                 items_ratedby_u = np.array([
-                    int(item) for item, user in zip(X[:,1], X[:,0])
+                    int(item) for user, item in zip(X[:,0], X[:,1])
                         if item != i_ix and user == u_ix
                 ])
 

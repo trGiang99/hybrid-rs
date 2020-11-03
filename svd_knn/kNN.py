@@ -70,7 +70,7 @@ class kNN:
         """
         # If there's already a rating
         if(self.ultility[u,i]):
-            print (f"User {u} has rated movie {i} already.")
+            print (f"User {u} has already rated movie {i}.")
             return
         # User based CF
         if (self.uuCF):
@@ -144,7 +144,7 @@ class kNN:
         n_test_ratings = test_data.shape[0]
 
         for n in range(n_test_ratings):
-            pred = self.predict(test_data["u_id"][n], test_data["i_id"][n])
+            pred = self.predict(test_data["u_id"][n].astype(int), test_data["i_id"][n].astype(int))
             squared_error += (pred - test_data["rating"][n])**2
 
         return np.sqrt(squared_error/n_test_ratings)
