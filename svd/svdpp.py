@@ -199,7 +199,7 @@ class svdpp(svd):
     def predict_pair(self, u_id, i_id, clip=True):
         """Returns the model rating prediction for a given user/item pair.
         Args:
-            u_id (int): a user id.
+            u_id (int): an user id.
             i_id (int): an item id.
             clip (boolean, default is `True`): whether to clip the prediction
                 or not.
@@ -230,10 +230,10 @@ class svdpp(svd):
             # compute user implicit feedback
             u_impl_fdb = np.zeros(self.n_factors)
             for j in Iu:
-                for f in range(self.n_factors):
-                    u_impl_fdb[f] += self.yj[j, f] / sqrt_Iu
+                for factor in range(self.n_factors):
+                    u_impl_fdb[factor] += self.yj[j, factor] / sqrt_Iu
 
-            pred += np.dot(self.pu[u_ix] + u_impl_fdb, self.qi[i_ix])
+            pred += np.dot(self.qi[i_ix], self.pu[u_ix] + u_impl_fdb)
 
         if clip:
             pred = self.max_rating if pred > self.max_rating else pred

@@ -147,8 +147,8 @@ def _run_svdpp_epoch(X, pu, qi, bu, bi, yj, global_mean, n_factors, lr_pu, lr_qi
         # compute user implicit feedback
         u_impl_fdb = np.zeros(n_factors)
         for j in Iu:
-            for f in range(n_factors):
-                u_impl_fdb[f] += yj[j, f] / sqrt_Iu
+            for factor in range(n_factors):
+                u_impl_fdb[factor] += yj[j, factor] / sqrt_Iu
 
         # Predict current rating
         pred = global_mean + bu[user] + bi[item]
@@ -209,8 +209,8 @@ def _compute_svdpp_val_metrics(X_val, pu, qi, bu, bi, yj, global_mean, n_factors
 
         u_impl_fdb = np.zeros(n_factors, np.double)
         for j in Iu:
-            for f in range(n_factors):
-                u_impl_fdb[f] += yj[j, f] / sqrt_Iu
+            for factor in range(n_factors):
+                u_impl_fdb[factor] += yj[j, factor] / sqrt_Iu
 
         if user > -1:
             pred += bu[user]
@@ -220,7 +220,7 @@ def _compute_svdpp_val_metrics(X_val, pu, qi, bu, bi, yj, global_mean, n_factors
 
         if (user > -1) and (item > -1):
             for factor in range(n_factors):
-                pred += pu[user, factor] * (qi[item, factor] + u_impl_fdb[f])
+                pred += pu[user, factor] * (qi[item, factor] + u_impl_fdb[factor])
 
         residuals.append(rating - pred)
 
