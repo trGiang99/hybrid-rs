@@ -1,41 +1,53 @@
 import numpy as np
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
+from math import sqrt
 
-from loader import DataLoader
-from svd_knn import kNN
-
-
-print("\nReimlementation of KNN with mean normalization:")
-
-train_data, test_data = DataLoader("movielens-sample").load_sparse()
-
-knn = kNN(data=train_data, k=5, distance="cosine", uuCF=1, normalize="mean")
-knn.fit()
-print (f'\nRMSE: {knn.rmse(test_data)}')
+from utils import DataLoader
+# from svd_knn import hybrid
+from svd import svdpp
 
 
-print("\nKNN with mean normalization from NicolasHug/Surprise:")
-# Import surprise module
-from surprise.prediction_algorithms.knns import KNNWithMeans
-from surprise import Dataset
-from surprise import Reader
-from surprise import accuracy
-from surprise.model_selection import train_test_split
+print("Loading data ...")
+loader = DataLoader(
+    data_folder="movielens10k",
+    genome_folder="movielens10k"
+)
+train_data, test_data = loader.load_csv2df(use_val=False)
+movie_genome = loader.load_genome_fromcsv()
 
+# knn_options = {
+#     'k': 20,
+#     'distance': 'cosine',
+# }
 
-file_path = "movielens-sample/rating.csv"
-reader = Reader(line_format='user item rating timestamp', sep=",", skip_lines=1)
-data = Dataset.load_from_file(file_path, reader=reader)
+# nfactors = movie_genome.shape[1]
+# svd_options = {
+#     'learning_rate': 0.001,
+#     'regularization': 0.02,
+#     'n_epochs': 20,
+#     'n_factors': nfactors,
+#     'min_rating': 0.5,
+#     'max_rating': 5
+# }
 
-trainset, testset = train_test_split(data, test_size=.2)
+# model = hybrid(knn_options=knn_options, svd_options=svd_options)
+# model.fit(train_data=train_data, movie_genome=movie_genome)
 
-# Config for surprise similarity function
-sim_options = {
-    'name': 'cosine',
-    'user_based': True
-}
+nfactors = 1128
+model = svdpp(
+    learning_rate=0.005,
+    regularization=0.02,
+    n_epochs=20, n_factors=nfactors,
+    min_rating=0.5, max_rating=5
+)
+model.fit(X=train_data, i_factor=movie_genome)
 
-algo = KNNWithMeans(k=5, sim_options=sim_options)
-algo.fit(trainset)
+pred = model.predict(test_data)
+rmse = sqrt(mean_squared_error(test_data["rating"], pred))
+mae = mean_absolute_error(test_data['rating'], pred)
 
-predictions = algo.test(testset)
-accuracy.rmse(predictions)
+print(f'\nTest RMSE: {rmse:.5f}')
+print(f'Test MAE: {mae:.5f}')
+
+# model.save_checkpoint("checkpoint.pkl")

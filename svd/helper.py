@@ -104,7 +104,7 @@ def _compute_svd_val_metrics(X_val, pu, qi, bu, bi, global_mean, n_factors):
 
 
 @njit
-def _run_svdpp_epoch(X, pu, qi, bu, bi, yj, global_mean, n_factors, lr_pu, lr_qi, lr_bu, lr_bi, lr_yj, reg_pu, reg_qi, reg_bu, reg_bi, reg_yj):
+def _run_svdpp_epoch(X, pu, qi, bu, bi, yj, global_mean, n_factors, I, lr_pu, lr_qi, lr_bu, lr_bi, lr_yj, reg_pu, reg_qi, reg_bu, reg_bi, reg_yj):
     """Runs an SVD++ epoch, updating model weights (pu, qi, bu, bi).
     Args:
         X (numpy array): training set.
@@ -138,14 +138,13 @@ def _run_svdpp_epoch(X, pu, qi, bu, bi, yj, global_mean, n_factors, lr_pu, lr_qi
         user, item, rating = int(X[i, 0]), int(X[i, 1]), X[i, 2]
 
         # Items rated by user u
-        Iu = np.array([
-            int(i) for u, i, _ in X if u == user
-        ])
+        Iu = I[user]
+        Iu = Iu[Iu >= 0]
         # Square root of number of items rated by user u
-        sqrt_Iu = np.sqrt(len(Iu))
+        sqrt_Iu = np.sqrt(Iu.shape[0])
 
-        # compute user implicit feedback
-        u_impl_fdb = np.zeros(n_factors)
+        # Compute user implicit feedback
+        u_impl_fdb = np.zeros(n_factors, np.double)
         for j in Iu:
             for factor in range(n_factors):
                 u_impl_fdb[factor] += yj[j, factor] / sqrt_Iu
@@ -179,7 +178,7 @@ def _run_svdpp_epoch(X, pu, qi, bu, bi, yj, global_mean, n_factors, lr_pu, lr_qi
     return pu, qi, bu, bi, yj, train_loss
 
 @njit
-def _compute_svdpp_val_metrics(X_val, pu, qi, bu, bi, yj, global_mean, n_factors):
+def _compute_svdpp_val_metrics(X_val, pu, qi, bu, bi, yj, global_mean, n_factors, I):
     """Computes validation metrics (loss, rmse, and mae) for SVD++.
     Args:
         X_val (numpy array): validation set.
@@ -199,11 +198,10 @@ def _compute_svdpp_val_metrics(X_val, pu, qi, bu, bi, yj, global_mean, n_factors
         user, item, rating = int(X_val[i, 0]), int(X_val[i, 1]), X_val[i, 2]
 
         # Items rated by user u
-        Iu = np.array([
-            i for u, i, _ in X if u == user
-        ])
+        Iu = I[user]
+        Iu = Iu[Iu >= 0]
         # Square root of number of items rated by user u
-        sqrt_Iu = np.sqrt(len(Iu))
+        sqrt_Iu = np.sqrt(Iu.shape[0])
 
         pred = global_mean
 
@@ -220,7 +218,7 @@ def _compute_svdpp_val_metrics(X_val, pu, qi, bu, bi, yj, global_mean, n_factors
 
         if (user > -1) and (item > -1):
             for factor in range(n_factors):
-                pred += pu[user, factor] * (qi[item, factor] + u_impl_fdb[factor])
+                pred += qi[item, factor] * (pu[user, factor] + u_impl_fdb[factor])
 
         residuals.append(rating - pred)
 

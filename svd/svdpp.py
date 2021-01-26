@@ -32,6 +32,13 @@ class svdpp(svd):
             bi (numpy array): items biases vector.
             yj (numpy array): The implicit item factors.
         """
+        I = [[int(i) for u, i, _ in X if u == user]
+                for user in np.unique(X[:,0])
+        ]
+        self.I = np.full((np.unique(X[:,0]).shape[0], max([len(x) for x in I])), -1)
+        for i, v in enumerate(I):
+            self.I[i][0:len(v)] = v
+
         for epoch_ix in range(self.n_epochs):
             start = self._on_epoch_begin(epoch_ix)
 
@@ -39,7 +46,7 @@ class svdpp(svd):
                 X = _shuffle(X)
 
             pu, qi, bu, bi, yj, train_loss = _run_svdpp_epoch(
-                                X, pu, qi, bu, bi, yj, self.global_mean, self.n_factors,
+                                X, pu, qi, bu, bi, yj, self.global_mean, self.n_factors, self.I,
                                 self.lr_pu, self.lr_qi, self.lr_bu, self.lr_bi, self.lr_yj,
                                 self.reg_pu, self.reg_qi, self.reg_bu, self.reg_bi, self.reg_yj
                             )
@@ -47,7 +54,7 @@ class svdpp(svd):
             if X_val is not None:
                 self.metrics_[epoch_ix, :] = _compute_svdpp_val_metrics(X_val, pu, qi, bu, bi, yj,
                                                                   self.global_mean,
-                                                                  self.n_factors)
+                                                                  self.n_factors, self.I)
                 self._on_epoch_end(start,
                                    train_loss=train_loss,
                                    val_loss=self.metrics_[epoch_ix, 0],
@@ -91,16 +98,16 @@ class svdpp(svd):
         self.min_delta_ = min_delta
 
         print('\nPreprocessing data...')
-        self.X = self._preprocess_data(X)
+        X = self._preprocess_data(X)
         if X_val is not None:
             self.metrics_ = np.zeros((self.n_epochs, 3), dtype=np.float)
             X_val = self._preprocess_data(X_val, train=False)
 
-        self.global_mean = np.mean(self.X[:, 2])
+        self.global_mean = np.mean(X[:, 2])
 
-        # Initialize pu, qi, bu, bi
-        n_user = len(np.unique(self.X[:, 0]))
-        n_item = len(np.unique(self.X[:, 1]))
+        # Initialize pu, qi, bu, bi, yj
+        n_user = len(np.unique(X[:, 0]))
+        n_item = len(np.unique(X[:, 1]))
 
         if i_factor is not None:
             qi = i_factor
@@ -118,7 +125,7 @@ class svdpp(svd):
         yj = np.random.normal(0, .1, (n_item, self.n_factors))
 
         print('Start training...')
-        self._sgd(self.X, X_val, pu, qi, bu, bi, yj)
+        self._sgd(X, X_val, pu, qi, bu, bi, yj)
         print("Done.")
 
         return self
@@ -161,7 +168,7 @@ class svdpp(svd):
         print(f"Load checkpoint from {checkpoint} successfully.")
 
         print('\nPreprocessing data...')
-        self.X = self._preprocess_data(X, train=False)
+        X = self._preprocess_data(X, train=False)
         if X_val is not None:
             self.metrics_ = np.zeros((self.n_epochs, 3), dtype=np.float)
             X_val = self._preprocess_data(X_val, train=False)
@@ -169,7 +176,7 @@ class svdpp(svd):
         self.global_mean = np.mean(X[:, 2])
 
         print('Start training...')
-        self._sgd(self.X, X_val, pu, qi, bu, bi, yj)
+        self._sgd(X, X_val, pu, qi, bu, bi, yj)
         print("Done.")
 
         return self
@@ -221,9 +228,8 @@ class svdpp(svd):
 
         if user_known and item_known:
             # Items rated by user u
-            Iu = np.array([
-                int(i) for u, i, _ in self.X if u == u_ix
-            ])
+            Iu = self.I[u_ix]
+            Iu = Iu[Iu >= 0]
             # Square root of number of items rated by user u
             sqrt_Iu = np.sqrt(len(Iu))
 
