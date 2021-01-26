@@ -5,12 +5,11 @@ from scipy import sparse
 
 
 class DataLoader:
-    """
-    Contain methods to read and split dataset into training set and test set.
-
+    """Contain methods to read and split dataset into training set and test set.
+    Support MovieLens20M Dataset, including rating information and Tag Genome.
     Args:
-            data_folder (string): Path to folder that contain dataset
-            genome_folder (string): Path to folder that contain the genome_scores file
+        data_folder (string): Path to folder that contain dataset
+        genome_folder (string): Path to folder that contain the "genome_scores" file
     """
     def __init__(self, data_folder, genome_folder=None):
         self.__data_folder = data_folder
@@ -42,14 +41,10 @@ class DataLoader:
         )
 
     def load_csv2df(self, use_val=True, columns=['u_id', 'i_id', 'rating', 'timestamp']):
-        """
-        Load training set, validate set and test set.
-        Each as DataFrame
-
+        """Load training set, validate set and test set from .csv file.
         Args:
             has_val (boolean): Denote if using validate data or not. Defaults to True.
             columns (list): Columns name for DataFrame. Defaults to ['u_id', 'i_id', 'rating', 'timestamp'].
-
         Returns:
             train, val, test (DataFrame)
         """
@@ -63,13 +58,11 @@ class DataLoader:
             return self.__train_data, self.__test_data
 
     def load_genome_fromcsv(self, genome_file="genome_scores.csv", columns=["i_id", "g_id", "score"], reset_index=False):
-        """
-        Load genome scores from file.
+        """Load genome scores from .csv file.
         Args:
             genome_file (string): File name that contain genome scores. Must be in csv format.
             columns (list, optional): Columns name for DataFrame. Must be ["i_id", "g_id", "score"] or ["i_id", "score", "g_id"].
-            reset_index (boolean): Reset the genome_tag column or not. Defaults to False.
-
+            reset_index (boolean): If True then reset the genome_tag column, continuous from 1. Defaults to False.
         Returns:
             scores (DataFrame)
         """
@@ -90,9 +83,11 @@ class DataLoader:
         return sparse.csr_matrix((genome['score'], (genome['i_id'].astype(int), genome['g_id'].astype(int))))[:,1:].toarray()
 
     def load_sparse(self):
-        """Convert dataframe of training set to scipy.sparse matrix
+        """Convert dataframe of training set to scipy.sparse matrix.
         Row u is the ratings that user u has given to all item.
         Column i is the ratings that all users have given to item i.
+        Returns:
+            train_data, test_data (DataFrame)
         """
         columns = ['u_id', 'i_id', 'rating', 'timestamp']
 
