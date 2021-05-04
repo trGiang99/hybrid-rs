@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 
-from scipy import sparse
-
 
 class DataLoader:
     """
@@ -29,19 +27,37 @@ class DataLoader:
             header=0, names=columns
         )
 
+        self.user_dict = {uIds: idx for idx, uIds in enumerate(np.sort(self.__train_data['u_id'].unique()))}
+        self.item_dict = {iIds: idx for idx, iIds in enumerate(np.sort(self.__train_data['i_id'].unique()))}
+        self.__train_data = self.__preprocess(self.__train_data)
+
     def __read_testset(self, columns):
         self.__test_data = pd.read_csv(
             self.__data_folder + "/rating_test.csv",
             header=0, names=columns
         )
+        self.__test_data = self.__preprocess(self.__test_data)
 
     def __read_valset(self, columns):
         self.__val_data = pd.read_csv(
             self.__data_folder + "/rating_val.csv",
             header=0, names=columns
         )
+        self.__val_data = self.__preprocess(self.__val_data)
 
-    def load_csv2df(self, use_val=True, columns=['u_id', 'i_id', 'rating', 'timestamp']):
+    def __preprocess(self, data):
+        data['u_id'] = data['u_id'].map(self.user_dict)
+        data['i_id'] = data['i_id'].map(self.item_dict)
+
+        # Tag unknown users/items with -1 (when val)
+        data.fillna(-1, inplace=True)
+
+        data['u_id'] = data['u_id'].astype(np.int32)
+        data['i_id'] = data['i_id'].astype(np.int32)
+
+        return data[['u_id', 'i_id', 'rating']].values
+
+    def load_csv2ndarray(self, use_val=False, columns=['u_id', 'i_id', 'rating', 'timestamp']):
         """
         Load training set, validate set and test set.
         Each as DataFrame
@@ -51,7 +67,7 @@ class DataLoader:
             columns (list): Columns name for DataFrame. Defaults to ['u_id', 'i_id', 'rating', 'timestamp'].
 
         Returns:
-            train, val, test (DataFrame)
+            train, val, test (np.array)
         """
         self.__read_trainset(columns)
         self.__read_testset(columns)
@@ -79,42 +95,10 @@ class DataLoader:
         )
 
         if reset_index:
-            tag_map = {genome.g_id: (newIdx+1) for newIdx, genome in genome.loc[genome.i_id == 1].iterrows()}
+            tag_map = {genome.g_id: newIdx for newIdx, genome in genome.loc[genome.i_id == 1].iterrows()}
             genome["g_id"] = genome["g_id"].map(tag_map)
 
-        item_map = {iIds: idx for idx, iIds in enumerate(np.sort(self.__train_data.i_id.unique()))}
-
-        genome['i_id'] = genome['i_id'].map(item_map)
+        genome['i_id'] = genome['i_id'].map(self.item_dict)
         genome.fillna(0, inplace=True)
 
-        return sparse.csr_matrix((genome['score'], (genome['i_id'].astype(int), genome['g_id'].astype(int))))[:,1:].toarray()
-
-    def load_sparse(self):
-        """Convert dataframe of training set to scipy.sparse matrix
-        Row u is the ratings that user u has given to all item.
-        Column i is the ratings that all users have given to item i.
-        """
-        columns = ['u_id', 'i_id', 'rating', 'timestamp']
-
-        self.__read_trainset(columns)
-        self.__read_testset(columns)
-
-        item_map = {iIds: idx for idx, iIds in enumerate(np.sort(self.__train_data.i_id.unique()))}
-        user_map = {uIds: idx for idx, uIds in enumerate(np.sort(self.__train_data.u_id.unique()))}
-
-        self.__train_data['u_id'] = self.__train_data['u_id'].map(user_map)
-        self.__train_data['i_id'] = self.__train_data['i_id'].map(item_map)
-
-        train_data = sparse.csr_matrix((
-            self.__train_data["rating"],
-            (self.__train_data["u_id"], self.__train_data["i_id"])
-        ))
-
-        # Reset the index of test_data dataframe to 0
-        self.__test_data.reset_index(drop=True, inplace=True)
-        self.__test_data['u_id'] = self.__test_data['u_id'].map(user_map)
-        self.__test_data['i_id'] = self.__test_data['i_id'].map(item_map)
-        # Tag unknown users/items with -1 (when val)
-        self.__test_data.fillna(-1, inplace=True)
-
-        return train_data, self.__test_data
+        return sparse.csr_matrix((genome['score'], (genome['i_id'].astype(int), genome['g_id'].astype(int)))).toarray()
