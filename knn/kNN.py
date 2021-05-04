@@ -7,19 +7,22 @@ from scipy.sparse.linalg import norm
 
 from utils import timer
 from .sim import _cosine, _pcc, _cosine_genome, _pcc_genome
+from .knn_helper import _baseline_sgd
 
 
 class kNN:
     """Reimplementation of kNN argorithm.
 
     Args:
-            k (int): Number of neibors use in prediction
-            distance (str, optional): Distance function. Defaults to "cosine".
-            uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
-            normalize (str, optional): Normalization method. Defaults to "none".
+        k (int): Number of neibors use in prediction
+        min_k (int): The minimum number of neighbors to take into account for aggregation. If there are not enough neighbors, the neighbor aggregation is set to zero
+        distance (str, optional): Distance function. Defaults to "cosine".
+        uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
+        normalize (str, optional): Normalization method. Defaults to "none".
     """
-    def __init__(self, k, distance="cosine", uuCF=0, normalize="none"):
+    def __init__(self, k, min_k=1, distance="cosine", uuCF=0, normalize="none"):
         self.k = k
+        self.min_k = min_k
 
         self.__supported_disc_func = ["cosine", "pearson"]
         assert distance in self.__supported_disc_func, f"Distance function should be one of {self.__supported_disc_func}"
@@ -38,13 +41,17 @@ class kNN:
 
     @timer("Runtime: ")
     def fit(self, train_data, genome=None):
-        """Fit data (ultility matrix) into the model.
+        """Fit data (utility matrix) into the model.
 
         Args:
             data (scipy.sparse.csr_matrix): Training data.
             genome (ndarray): Movie genome scores from MovieLens 20M.
         """
-        self.ultility = train_data
+        self.utility = train_data
+
+        self.user_list = self.utility[:, 0]
+        self.item_list = self.utility[:, 1]
+
         if(self.__normalize):
             print("Normalizing the utility matrix ...")
             self.__normalize()
@@ -54,68 +61,35 @@ class kNN:
             if genome is not None:
                 self.S = _cosine_genome(genome)
             else:
-                self.S = _cosine(self.ultility, self.uuCF)
+                self.S = _cosine(self.utility, self.uuCF)
         elif self.__distance == "pearson":
             if genome is not None:
                 self.S = _pcc_genome(genome)
             else:
-                self.S = _pcc(self.ultility, self.uuCF)
+                self.S = _pcc(self.utility, self.uuCF)
 
-    def predict(self, u, i):
+    def predict(self, u_id, i_id):
         """Predict the rating of user u for item i
 
         Args:
             u (int): index of user
             i (int): index of item
         """
-        # If there's already a rating
-        if(self.ultility[u,i]):
-            print (f"User {u} has already rated movie {i}.")
-            return
-        # User based CF
-        if (self.uuCF):
-            # Find users that have rated item i beside user u
-            users_rated_i = self.ultility.getcol(i).nonzero()[0]
-            users_rated_i = users_rated_i[users_rated_i != u]
+        pred = self.global_mean
 
-            sim = []
-            for user_rated_i in users_rated_i:
-                sim.append(self.S[u, user_rated_i]) if self.S[u, user_rated_i] else sim.append(self.S[user_rated_i, u])
+        user_known, item_known = False, False
+        if u_id in self.user_list:
+            user_known = True
+            pred += self.bu[u_id]
+        if i_id in self.item_list:
+            item_known = True
+            pred += self.bi[i_id]
 
-            sim = np.array(sim)
+        if not (user_known and item_known):
+            return pred
 
-            # Sort similarity list in descending
-            k_nearest_users = np.argsort(sim)[-self.k:]
-
-            # Get first k users or all if number of similar users smaller than k
-            sim = sim[k_nearest_users]
-            ratings = np.array([self.ultility[v, i] for v in users_rated_i[k_nearest_users]])
-
-            prediction = np.sum(sim * ratings) / (np.abs(sim).sum() + 1e-8)
-        # Item based CF
-        else:
-            # Find items that have been rated by user u beside item i
-            items_ratedby_u = self.ultility.getrow(u).nonzero()[1]
-            items_ratedby_u = items_ratedby_u[items_ratedby_u != i]
-
-            sim = []
-            for item_ratedby_u in items_ratedby_u:
-                sim.append(self.S[i, item_ratedby_u]) if self.S[i, item_ratedby_u] else sim.append(self.S[item_ratedby_u, i])
-
-            sim = np.array(sim)
-
-            # Sort similarity list in descending
-            k_nearest_items = np.argsort(sim)[-self.k:]
-
-            # Get first k items or all if number of similar items smaller than k
-            sim = sim[k_nearest_items]
-            ratings = np.array([self.ultility[u, j] for j in items_ratedby_u[k_nearest_items]])
-
-            prediction = np.sum(sim * ratings) / (np.abs(sim).sum() + 1e-8)
-
-        if (self.__normalize):
-            return prediction + self.mu[u]
-        return prediction
+        pred += _predict(u_id, i_id, self.utility, self.S, self.k, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
+        return pred
 
     def __recommend(self, u):
         """Determine all items should be recommended for user u. (uuCF =1)
@@ -131,6 +105,7 @@ class kNN:
         """
         pass
 
+    @timer("Time for predicting: ")
     def rmse(self, test_data):
         """Calculate Root Mean Squared Error on the test data
 
@@ -144,18 +119,18 @@ class kNN:
         n_test_ratings = test_data.shape[0]
 
         for n in range(n_test_ratings):
-            pred = self.predict(test_data["u_id"][n].astype(int), test_data["i_id"][n].astype(int))
-            squared_error += (pred - test_data["rating"][n])**2
+            pred = self.predict(test_data[n, 0].astype(int), test_data[n, 1].astype(int))
+            squared_error += (pred - test_data[n, 2])**2
 
         return np.sqrt(squared_error/n_test_ratings)
 
     def __mean_normalize(self):
-        """Normalize the ultility matrix.
+        """Normalize the utility matrix.
         This method only normalize the data base on the mean of ratings.
         Any unrated item will remain the same.
         """
-        tot = np.array(self.ultility.sum(axis=1).squeeze())[0]
-        cts = np.diff(self.ultility.indptr)
+        tot = np.array(self.utility.sum(axis=1).squeeze())[0]
+        cts = np.diff(self.utility.indptr)
         cts[cts == 0] = 1       # Avoid dividing by 0 resulting nan.
 
         # Mean ratings of each users.
@@ -164,13 +139,21 @@ class kNN:
         # Diagonal matrix with the means on the diagonal.
         d = sparse.diags(self.mu, 0)
 
-        # A matrix that is like Ultility, but has 1 at the non-zero position instead of the ratings.
-        b = self.ultility.copy()
+        # A matrix that is like Utility, but has 1 at the non-zero position instead of the ratings.
+        b = self.utility.copy()
         b.data = np.ones_like(b.data)
 
         # d*b = Mean matrix - a matrix with the means of each row at the non-zero position
         # Subtract the mean matrix to get the normalize data.
-        self.ultility -= d*b
+        self.utility -= d*b
 
     def __baseline(self):
-        pass
+        """Normalize the utility matrix.
+        Compute the baseline estimate for all user and movie using the following fomular.
+        b_{ui} = \mu + b_u + b_i
+        """
+        self.global_mean = np.mean(self.utility[:, 2])
+        n_users = len(np.unique(self.utility[:, 0]))
+        n_items = len(np.unique(self.utility[:, 1]))
+
+        self.bu, self.bi = _baseline_sgd(self.utility, self.global_mean, n_users, n_items)
