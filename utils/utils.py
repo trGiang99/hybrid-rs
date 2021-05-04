@@ -27,7 +27,7 @@ def timer(text=''):
             end = time.time()
 
             hours = trunc((end - start) / 3600)
-            minutes = trunc((end - start) / 60) - hours*60
+            minutes = trunc((end - start - hours*3600) / 60) - hours*60
             seconds = round((end - start) % 60)
 
             if hours > 1:
