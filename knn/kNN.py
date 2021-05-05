@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from math import sqrt
 
+import progressbar
+
 from scipy import sparse
 import heapq
 from scipy.sparse.linalg import norm
@@ -99,7 +101,7 @@ class kNN:
 
             items_ratedby_u = row_i.nonzero()[0]
             ratings = row_i.data
-            sim = [self.S[u_id, u] for u in items_ratedby_u]
+            sim = [self.S[i_id, i] for i in items_ratedby_u]
 
             neighbors = list(zip(items_ratedby_u, sim, ratings))
 
@@ -118,11 +120,11 @@ class kNN:
 
             if not (user_known and item_known):
                 return pred
+            pred += _predict(u_id, i_id, k_neighbors, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
 
         elif self.__normalize == self.__mean_normalize:
             return pred + self.mu[u]
 
-            pred += _predict(u_id, i_id, k_neighbors, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
         return pred
 
     def __recommend(self, u):
@@ -152,9 +154,13 @@ class kNN:
         squared_error = 0
         n_test_ratings = test_data.shape[0]
 
+        bar = progressbar.ProgressBar(maxval=3957876, widgets=[progressbar.Bar(), ' ', progressbar.Percentage()])
+        bar.start()
         for n in range(n_test_ratings):
             pred = self.predict(test_data[n, 0].astype(int), test_data[n, 1].astype(int))
             squared_error += (pred - test_data[n, 2])**2
+            bar.update(n+1)
+        bar.finish()
 
         return np.sqrt(squared_error/n_test_ratings)
 
