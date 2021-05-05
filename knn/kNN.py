@@ -43,7 +43,7 @@ class kNN:
             self.__normalize = False
 
     @timer("Runtime: ")
-    def fit(self, train_data, genome=None):
+    def fit(self, train_data, genome=None, sim=None):
         """Fit data (utility matrix) into the model.
 
         Args:
@@ -52,30 +52,53 @@ class kNN:
         """
         self.X = train_data
 
+        self.user_list = np.unique(self.X[:, 0])
+        self.item_list = np.unique(self.X[:, 1])
 
-        self.user_list = self.X[:, 0]
-        self.item_list = self.X[:, 1]
+        self.n_users = len(self.user_list)
+        self.n_items = len(self.item_list)
 
         if(self.__normalize):
             print("Normalizing the utility matrix ...")
             self.__normalize()
-
-        print('Computing similarity matrix ...')
-        if self.__distance == "cosine":
-            if genome is not None:
-                self.S = _cosine_genome(genome)
-            else:
-                self.S = _cosine(self.X, self.uuCF)
-        elif self.__distance == "pearson":
-            if genome is not None:
-                self.S = _pcc_genome(genome)
-            else:
-                self.S = _pcc(self.X, self.uuCF)
+        
+        if sim is None:
+            print('Computing similarity matrix ...')
+            if self.__distance == "cosine":
+                if genome is not None:
+                    self.S = _cosine_genome(genome)
+                else:
+                    self.S = _cosine(self.X, self.uuCF)
+            elif self.__distance == "pearson":
+                if genome is not None:
+                    self.S = _pcc_genome(genome)
+                else:
+                    self.S = _pcc(self.X, self.uuCF)
+        else:
+            self.S = sim
 
         self.utility = sparse.csr_matrix((
             self.X[:, 2],
             (self.X[:, 0].astype(int), self.X[:, 1].astype(int))
         ))
+
+        if self.uuCF:
+            self.users_rated = []
+            for id in range(self.n_items):
+                col_u = self.utility.getcol(id)
+                users_rated_i = col_u.nonzero()[0]
+                ratings = col_u.data
+
+                self.users_rated.append(np.dstack((users_rated_i, ratings)))
+        else:
+            self.items_ratedby = []
+            for id in range(self.n_users):
+                row_i = self.utility.getrow(id)
+                items_ratedby_u = row_i.nonzero()[0]
+                ratings = row_i.data
+
+                self.items_ratedby.append(np.dstack((items_ratedby_u, ratings))[0])
+
 
     def predict(self, u_id, i_id):
         """Predict the rating of user u for item i
@@ -89,21 +112,9 @@ class kNN:
             return
 
         if self.uuCF:
-            col_u = self.utility.getcol(i_id)
-
-            users_rated_i = col_u.nonzero()[0]
-            ratings = col_u.data
-            sim = [self.S(u_id, u) for u in users_rated_i]
-
-            neighbors = list(zip(users_rated_i, sim, ratings))
+            neighbors = [(x2, self.S[u_id, int(x2)], r) for (x2, r) in self.users_rated[i_id]]
         else:
-            row_i = self.utility.getrow(u_id)
-
-            items_ratedby_u = row_i.nonzero()[0]
-            ratings = row_i.data
-            sim = [self.S[i_id, i] for i in items_ratedby_u]
-
-            neighbors = list(zip(items_ratedby_u, sim, ratings))
+            neighbors = [(x2, self.S[i_id, int(x2)], r) for (x2, r) in self.items_ratedby[u_id]]
 
         k_neighbors = heapq.nlargest(self.k, neighbors, key=lambda t: t[1])
 
@@ -120,7 +131,8 @@ class kNN:
 
             if not (user_known and item_known):
                 return pred
-            pred += _predict(u_id, i_id, k_neighbors, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
+
+            pred += _predict(u_id, i_id, np.array(k_neighbors), self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
 
         elif self.__normalize == self.__mean_normalize:
             return pred + self.mu[u]
@@ -154,7 +166,7 @@ class kNN:
         squared_error = 0
         n_test_ratings = test_data.shape[0]
 
-        bar = progressbar.ProgressBar(maxval=3957876, widgets=[progressbar.Bar(), ' ', progressbar.Percentage()])
+        bar = progressbar.ProgressBar(maxval=n_test_ratings, widgets=[progressbar.Bar(), ' ', progressbar.Percentage()])
         bar.start()
         for n in range(n_test_ratings):
             pred = self.predict(test_data[n, 0].astype(int), test_data[n, 1].astype(int))
