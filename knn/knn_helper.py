@@ -6,6 +6,7 @@ from numba import njit
 def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0.02):
     """Optimize biases using SGD.
     Args:
+        X (ndarray): the training set with size (|TRAINSET|, 3)
         global_mean (float): mean ratings in training set
         n_users (np.array): number of users
         n_items (np.array): number of items
@@ -28,13 +29,11 @@ def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0
 
 @njit
 def _predict(u_id, i_id, k_neighbors, k_min, uuCF, global_mean, bu, bi):
-    """Optimize biases using SGD.
+    """Predict the fine-tune estimate of user u_id for item i_id in kNN.
     Args:
-        u (int): users Id
-        i (int): items Id
-        X (ndarray): utility matrix
-        S (ndarray): similarity matrix
-        k (int): number of k-nearest neighbors
+        u_id (int): users Id
+        i_id (int): items Id
+        k_neighbors (ndarray): k-nearest neighbors in the form of (id, sim, rating).
         k_min (int): number of minimum k
         uuCF (boolean): use user-user CF or not
         global_mean (float): mean ratings in training set
