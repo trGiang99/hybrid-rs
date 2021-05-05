@@ -1,3 +1,4 @@
+import numpy as np
 from numba import njit
 
 
@@ -26,7 +27,7 @@ def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0
 
 
 @njit
-def _predict(u_id, i_id, X, S, k, k_min, uuCF, global_mean, bu, bi):
+def _predict(u_id, i_id, k_neighbors, k_min, uuCF, global_mean, bu, bi):
     """Optimize biases using SGD.
     Args:
         u (int): users Id
@@ -42,27 +43,6 @@ def _predict(u_id, i_id, X, S, k, k_min, uuCF, global_mean, bu, bi):
     Returns:
         pred (float): predicted rating of user u for item i.
     """
-
-    # Find items that have been rated by user u beside item i
-    k_neighbors = np.zeros((k, 3))
-    for i in range(X.shape[0]):
-        user, item, rating = int(X[i, 0]), int(X[i, 1]), X[i, 2]
-
-        if uuCF:
-            if item != i_id:
-                continue
-            nb = user
-            sim = S[user, u_id]
-        else:
-            if user != u_id:
-                continue
-            nb = item
-            sim = S[item, i_id]
-
-        argmin = np.argmin(k_neighbors[:, 1])
-        if sim > k_neighbors[argmin, 1]:
-            k_neighbors[argmin] = np.array([nb, sim, rating])
-
     # Compute weighted average
     sum_sim = sum_ratings = actual_k = 0
     for (nb, sim, r) in k_neighbors:

@@ -3,11 +3,12 @@ import numpy as np
 from math import sqrt
 
 from scipy import sparse
+import heapq
 from scipy.sparse.linalg import norm
 
 from utils import timer
 from .sim import _cosine, _pcc, _cosine_genome, _pcc_genome
-from .knn_helper import _baseline_sgd
+from .knn_helper import _baseline_sgd, _predict
 
 
 class kNN:
@@ -47,10 +48,11 @@ class kNN:
             data (scipy.sparse.csr_matrix): Training data.
             genome (ndarray): Movie genome scores from MovieLens 20M.
         """
-        self.utility = train_data
+        self.X = train_data
 
-        self.user_list = self.utility[:, 0]
-        self.item_list = self.utility[:, 1]
+
+        self.user_list = self.X[:, 0]
+        self.item_list = self.X[:, 1]
 
         if(self.__normalize):
             print("Normalizing the utility matrix ...")
@@ -61,34 +63,66 @@ class kNN:
             if genome is not None:
                 self.S = _cosine_genome(genome)
             else:
-                self.S = _cosine(self.utility, self.uuCF)
+                self.S = _cosine(self.X, self.uuCF)
         elif self.__distance == "pearson":
             if genome is not None:
                 self.S = _pcc_genome(genome)
             else:
-                self.S = _pcc(self.utility, self.uuCF)
+                self.S = _pcc(self.X, self.uuCF)
+
+        self.utility = sparse.csr_matrix((
+            self.X[:, 2],
+            (self.X[:, 0].astype(int), self.X[:, 1].astype(int))
+        ))
 
     def predict(self, u_id, i_id):
         """Predict the rating of user u for item i
 
         Args:
-            u (int): index of user
-            i (int): index of item
+            u_id (int): index of user
+            i_id (int): index of item
         """
-        pred = self.global_mean
+        if(self.utility[u_id,i_id]):
+            print (f"User {u} has already rated movie {i}.")
+            return
 
-        user_known, item_known = False, False
-        if u_id in self.user_list:
-            user_known = True
-            pred += self.bu[u_id]
-        if i_id in self.item_list:
-            item_known = True
-            pred += self.bi[i_id]
+        if self.uuCF:
+            col_u = self.utility.getcol(i_id)
 
-        if not (user_known and item_known):
-            return pred
+            users_rated_i = col_u.nonzero()[0]
+            ratings = col_u.data
+            sim = [self.S(u_id, u) for u in users_rated_i]
 
-        pred += _predict(u_id, i_id, self.utility, self.S, self.k, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
+            neighbors = list(zip(users_rated_i, sim, ratings))
+        else:
+            row_i = self.utility.getrow(u_id)
+
+            items_ratedby_u = row_i.nonzero()[0]
+            ratings = row_i.data
+            sim = [self.S[u_id, u] for u in items_ratedby_u]
+
+            neighbors = list(zip(items_ratedby_u, sim, ratings))
+
+        k_neighbors = heapq.nlargest(self.k, neighbors, key=lambda t: t[1])
+
+        if self.__normalize == self.__baseline:
+            pred = self.global_mean
+
+            user_known, item_known = False, False
+            if u_id in self.user_list:
+                user_known = True
+                pred += self.bu[u_id]
+            if i_id in self.item_list:
+                item_known = True
+                pred += self.bi[i_id]
+
+            if not (user_known and item_known):
+                return pred
+
+        elif self.__normalize == self.__mean_normalize:
+            return pred + self.mu[u]
+
+            pred += _predict(u_id, i_id, k_neighbors, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
         return pred
 
     def __recommend(self, u):
@@ -129,8 +163,8 @@ class kNN:
         This method only normalize the data base on the mean of ratings.
         Any unrated item will remain the same.
         """
-        tot = np.array(self.utility.sum(axis=1).squeeze())[0]
-        cts = np.diff(self.utility.indptr)
+        tot = np.array(self.X.sum(axis=1).squeeze())[0]
+        cts = np.diff(self.X.indptr)
         cts[cts == 0] = 1       # Avoid dividing by 0 resulting nan.
 
         # Mean ratings of each users.
@@ -140,20 +174,20 @@ class kNN:
         d = sparse.diags(self.mu, 0)
 
         # A matrix that is like Utility, but has 1 at the non-zero position instead of the ratings.
-        b = self.utility.copy()
+        b = self.X.copy()
         b.data = np.ones_like(b.data)
 
         # d*b = Mean matrix - a matrix with the means of each row at the non-zero position
         # Subtract the mean matrix to get the normalize data.
-        self.utility -= d*b
+        self.X -= d*b
 
     def __baseline(self):
         """Normalize the utility matrix.
         Compute the baseline estimate for all user and movie using the following fomular.
         b_{ui} = \mu + b_u + b_i
         """
-        self.global_mean = np.mean(self.utility[:, 2])
-        n_users = len(np.unique(self.utility[:, 0]))
-        n_items = len(np.unique(self.utility[:, 1]))
+        self.global_mean = np.mean(self.X[:, 2])
+        n_users = len(np.unique(self.X[:, 0]))
+        n_items = len(np.unique(self.X[:, 1]))
 
-        self.bu, self.bi = _baseline_sgd(self.utility, self.global_mean, n_users, n_items)
+        self.bu, self.bi = _baseline_sgd(self.X, self.global_mean, n_users, n_items)
