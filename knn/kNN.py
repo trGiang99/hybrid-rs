@@ -61,7 +61,7 @@ class kNN:
         if(self.__normalize):
             print("Normalizing the utility matrix ...")
             self.__normalize()
-        
+
         if sim is None:
             print('Computing similarity matrix ...')
             if self.__distance == "cosine":
@@ -94,7 +94,7 @@ class kNN:
             self.items_ratedby = []
             for id in range(self.n_users):
                 row_i = self.utility.getrow(id)
-                items_ratedby_u = row_i.nonzero()[0]
+                items_ratedby_u = row_i.nonzero()[1]
                 ratings = row_i.data
 
                 self.items_ratedby.append(np.dstack((items_ratedby_u, ratings))[0])
@@ -111,28 +111,8 @@ class kNN:
             print (f"User {u} has already rated movie {i}.")
             return
 
-        if self.uuCF:
-            neighbors = [(x2, self.S[u_id, int(x2)], r) for (x2, r) in self.users_rated[i_id]]
-        else:
-            neighbors = [(x2, self.S[i_id, int(x2)], r) for (x2, r) in self.items_ratedby[u_id]]
-
-        k_neighbors = heapq.nlargest(self.k, neighbors, key=lambda t: t[1])
-
         if self.__normalize == self.__baseline:
-            pred = self.global_mean
-
-            user_known, item_known = False, False
-            if u_id in self.user_list:
-                user_known = True
-                pred += self.bu[u_id]
-            if i_id in self.item_list:
-                item_known = True
-                pred += self.bi[i_id]
-
-            if not (user_known and item_known):
-                return pred
-
-            pred += _predict(u_id, i_id, np.array(k_neighbors), self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
+            pred = _predict(u_id, i_id, self.items_ratedby[u_id], self.S, self.k, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
 
         elif self.__normalize == self.__mean_normalize:
             return pred + self.mu[u]

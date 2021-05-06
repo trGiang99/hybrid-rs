@@ -28,12 +28,14 @@ def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0
 
 
 @njit
-def _predict(u_id, i_id, k_neighbors, k_min, uuCF, global_mean, bu, bi):
-    """Predict the fine-tune estimate of user u_id for item i_id in kNN.
+def _predict(u_id, i_id, items_ratedby_u, S, k, k_min, uuCF, global_mean, bu, bi):
+    """Optimize biases using SGD.
     Args:
-        u_id (int): users Id
-        i_id (int): items Id
-        k_neighbors (ndarray): k-nearest neighbors in the form of (id, sim, rating).
+        u (int): users Id
+        i (int): items Id
+        X (ndarray): utility matrix
+        S (ndarray): similarity matrix
+        k (int): number of k-nearest neighbors
         k_min (int): number of minimum k
         uuCF (boolean): use user-user CF or not
         global_mean (float): mean ratings in training set
@@ -42,6 +44,29 @@ def _predict(u_id, i_id, k_neighbors, k_min, uuCF, global_mean, bu, bi):
     Returns:
         pred (float): predicted rating of user u for item i.
     """
+
+    # k_neighbors = heapq.nlargest(k, neighbors, key=lambda t: t[1])
+
+    k_neighbors = np.zeros((k, 3))
+    for i2, rating in items_ratedby_u:
+        sim = S[int(i2), i_id]
+        argmin = np.argmin(k_neighbors[:, 1])
+        if sim > k_neighbors[argmin, 1]:
+            k_neighbors[argmin] = np.array((i2, sim, rating))
+
+    est = global_mean + bu[u_id] + bi[i_id]
+
+    # user_known, item_known = False, False
+    # if u_id in user_list:
+        # user_known = True
+        # est += bu[u_id]
+    # if i_id in item_list:
+        # item_known = True
+        # est += bi[i_id]
+
+    # if not (user_known and item_known):
+    #     return est
+
     # Compute weighted average
     sum_sim = sum_ratings = actual_k = 0
     for (nb, sim, r) in k_neighbors:
@@ -58,6 +83,6 @@ def _predict(u_id, i_id, k_neighbors, k_min, uuCF, global_mean, bu, bi):
     if actual_k < k_min:
         sum_ratings = 0
 
-    est = sum_ratings / (sum_sim + 10e-6)
-
+    if sum_sim:
+        est += sum_ratings / sum_sim
     return est
