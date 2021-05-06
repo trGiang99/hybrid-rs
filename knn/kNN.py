@@ -1,16 +1,14 @@
 import pandas as pd
 import numpy as np
-from math import sqrt
 
 import progressbar
 
 from scipy import sparse
-import heapq
 from scipy.sparse.linalg import norm
 
 from utils import timer
 from .sim import _cosine, _pcc, _cosine_genome, _pcc_genome
-from .knn_helper import _baseline_sgd, _predict
+from .knn_helper import _baseline_sgd, _predict_baseline
 
 
 class kNN:
@@ -22,8 +20,9 @@ class kNN:
         distance (str, optional): Distance function. Defaults to "cosine".
         uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
         normalize (str, optional): Normalization method. Defaults to "none".
+        verbose (boolean): Show progress. Defaults to "False".
     """
-    def __init__(self, k, min_k=1, distance="cosine", uuCF=0, normalize="none"):
+    def __init__(self, k, min_k=1, distance="cosine", uuCF=False, normalize="none", verbose=False):
         self.k = k
         self.min_k = min_k
 
@@ -32,6 +31,8 @@ class kNN:
         self.__distance = distance
 
         self.uuCF = uuCF
+
+        self.verbose = verbose
 
         self.__normalize_method = ["none", "mean", "baseline"]
         assert normalize in self.__normalize_method, f"Normalize method should be one of {self.__normalize_method}"
@@ -42,25 +43,33 @@ class kNN:
         else:
             self.__normalize = False
 
-    @timer("Runtime: ")
     def fit(self, train_data, genome=None, sim=None):
         """Fit data (utility matrix) into the model.
 
         Args:
             data (scipy.sparse.csr_matrix): Training data.
-            genome (ndarray): Movie genome scores from MovieLens 20M.
+            genome (ndarray): Movie genome scores from MovieLens 20M. Defaults to "none".
+            sim (ndarray): Pre-calculate similarity matrix.  Defaults to "none".
         """
         self.X = train_data
 
-        self.user_list = np.unique(self.X[:, 0])
-        self.item_list = np.unique(self.X[:, 1])
+        if self.uuCF:
+            X[:, [0, 1]] = X[:, [1, 0]]     # Swap user_id column to movie_id column
 
-        self.n_users = len(self.user_list)
-        self.n_items = len(self.item_list)
+        self.x_list = np.unique(self.X[:, 0])       # For iiCF, x -> user
+        self.y_list = np.unique(self.X[:, 1])       # For iiCF, y -> item
+
+        self.n_x = len(self.x_list)
+        self.n_y = len(self.y_list)
 
         if(self.__normalize):
             print("Normalizing the utility matrix ...")
             self.__normalize()
+
+        self.utility = sparse.csr_matrix((
+            self.X[:, 2],
+            (self.X[:, 0].astype(int), self.X[:, 1].astype(int))
+        ))
 
         if sim is None:
             print('Computing similarity matrix ...')
@@ -68,51 +77,73 @@ class kNN:
                 if genome is not None:
                     self.S = _cosine_genome(genome)
                 else:
-                    self.S = _cosine(self.X, self.uuCF)
+                    self.S = _cosine(self.utility, self.uuCF)
             elif self.__distance == "pearson":
                 if genome is not None:
                     self.S = _pcc_genome(genome)
                 else:
-                    self.S = _pcc(self.X, self.uuCF)
+                    self.S = _pcc(self.utility, self.uuCF)
         else:
             self.S = sim
 
-        self.utility = sparse.csr_matrix((
-            self.X[:, 2],
-            (self.X[:, 0].astype(int), self.X[:, 1].astype(int))
-        ))
+        # List where element `i` is ndarray of `(xs, rating)` where `xs` is all x that rated y and the ratings.
+        self.y_rated = []
+        print("Listing all items rated by each users (or vice versa if uuCF) ...")
+        for id in range(self.n_x):
+            row_i = self.utility.getrow(id)
+            ys_rated_x = row_i.nonzero()[1]
+            ratings = row_i.data
 
-        if self.uuCF:
-            self.users_rated = []
-            for id in range(self.n_items):
-                col_u = self.utility.getcol(id)
-                users_rated_i = col_u.nonzero()[0]
-                ratings = col_u.data
+            self.y_rated.append(np.dstack((ys_rated_x, ratings))[0])
 
-                self.users_rated.append(np.dstack((users_rated_i, ratings)))
+    @timer("Time for predicting: ")
+    def predict(self, X):
+        """Returns estimated ratings of several given user/item pairs.
+        Args:
+            X (pandas DataFrame): storing all user/item pairs we want to predict
+            the ratings. Must contains columns labeled `u_id` and `i_id`.
+        Returns:
+            predictions (ndarray): Storing all predictions of the given user/item pairs.
+        """
+        self.predictions = []
+        self.ground_truth = X[:, 2]
+        n_pairs = X.shape[0]
+
+        print(f"Predicting {n_pairs} pairs of user-item ...")
+
+        if self.verbose:
+            bar = progressbar.ProgressBar(maxval=n_pairs, widgets=[progressbar.Bar(), ' ', progressbar.Percentage()])
+            bar.start()
+            for pair in range(n_pairs):
+                self.predictions.append(self.predict_pair(X[pair, 0].astype(int), X[pair, 1].astype(int)))
+                bar.update(pair + 1)
+            bar.finish()
         else:
-            self.items_ratedby = []
-            for id in range(self.n_users):
-                row_i = self.utility.getrow(id)
-                items_ratedby_u = row_i.nonzero()[1]
-                ratings = row_i.data
+            for pair in range(n_pairs):
+                self.predictions.append(self.predict_pair(X[pair, 0].astype(int), X[pair, 1].astype(int)))
 
-                self.items_ratedby.append(np.dstack((items_ratedby_u, ratings))[0])
+        self.predictions = np.array(self.predictions)
+        return self.predictions
 
-
-    def predict(self, u_id, i_id):
+    def predict_pair(self, x_id, y_id):
         """Predict the rating of user u for item i
 
         Args:
-            u_id (int): index of user
-            i_id (int): index of item
+            x_id (int): index of x (For iiCF, x -> user)
+            y_id (int): index of y (For iiCF, y -> item)
+
+        Returns:
+            pred (float): prediction of the given user/item pair.
         """
-        if(self.utility[u_id,i_id]):
-            print (f"User {u} has already rated movie {i}.")
+        if(self.utility[x_id, y_id]):
+            if self.uuCF:
+                print (f"User {y_id} has already rated movie {x_id}.")
+            else:
+                print (f"User {x_id} has already rated movie {y_id}.")
             return
 
         if self.__normalize == self.__baseline:
-            pred = _predict(u_id, i_id, self.items_ratedby[u_id], self.S, self.k, self.min_k, self.uuCF, self.global_mean, self.bu, self.bi)
+            pred = _predict_baseline(x_id, y_id, self.y_rated[x_id], self.S, self.k, self.min_k, self.global_mean, self.bx, self.by)
 
         elif self.__normalize == self.__mean_normalize:
             return pred + self.mu[u]
@@ -124,6 +155,7 @@ class kNN:
         or all users who might have interest on item u (uuCF = 0)
         The decision is made based on all i such that: self.pred(u, i) > 0.
         Suppose we are considering items which have not been rated by u yet.
+        NOT YET IMPLEMENTED...
 
         Args:
             u (int): user that we are recommending
@@ -133,28 +165,20 @@ class kNN:
         """
         pass
 
-    @timer("Time for predicting: ")
-    def rmse(self, test_data):
-        """Calculate Root Mean Squared Error on the test data
-
-        Args:
-            test_data (DataFrame): testing data
-
-        Returns:
-            float: RMSE
+    def rmse(self):
+        """Calculate Root Mean Squared Error between the predictions and the ground truth.
+        Print the RMSE.
         """
-        squared_error = 0
-        n_test_ratings = test_data.shape[0]
+        mse = np.mean((self.predictions - self.ground_truth)**2)
+        rmse_ = np.sqrt(mse)
+        print(f"RMSE: {rmse_:.5f}")
 
-        bar = progressbar.ProgressBar(maxval=n_test_ratings, widgets=[progressbar.Bar(), ' ', progressbar.Percentage()])
-        bar.start()
-        for n in range(n_test_ratings):
-            pred = self.predict(test_data[n, 0].astype(int), test_data[n, 1].astype(int))
-            squared_error += (pred - test_data[n, 2])**2
-            bar.update(n+1)
-        bar.finish()
-
-        return np.sqrt(squared_error/n_test_ratings)
+    def mae(self):
+        """Calculate Mean Absolute Error between the predictions and the ground truth.
+        Print the MAE.
+        """
+        mae_ = np.mean(np.abs(self.predictions - self.ground_truth))
+        print(f"MAE: {mae_:.5f}")
 
     def __mean_normalize(self):
         """Normalize the utility matrix.
@@ -185,7 +209,5 @@ class kNN:
         b_{ui} = \mu + b_u + b_i
         """
         self.global_mean = np.mean(self.X[:, 2])
-        n_users = len(np.unique(self.X[:, 0]))
-        n_items = len(np.unique(self.X[:, 1]))
 
-        self.bu, self.bi = _baseline_sgd(self.X, self.global_mean, n_users, n_items)
+        self.bx, self.by = _baseline_sgd(self.X, self.global_mean, self.n_x, self.n_y)

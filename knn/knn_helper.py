@@ -10,6 +10,9 @@ def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0
         global_mean (float): mean ratings in training set
         n_users (np.array): number of users
         n_items (np.array): number of items
+        n_epochs (int): number of iterations to train
+        lr (float): the learning rate
+        reg (float): the regularization strength
     Returns:
         A tuple ``(bu, bi)``, which are users and items baselines.
     """
@@ -28,43 +31,43 @@ def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0
 
 
 @njit
-def _predict(u_id, i_id, items_ratedby_u, S, k, k_min, uuCF, global_mean, bu, bi):
-    """Optimize biases using SGD.
+def _predict_baseline(x_id, y_id, y_rated, S, k, k_min, global_mean, bx, by):
+    """Predict rating of user x for item y (if iiCF) using baseline estimate.
     Args:
-        u (int): users Id
-        i (int): items Id
-        X (ndarray): utility matrix
+        x_id (int): users Id    (if iiCF)
+        y_id (int): items Id    (if iiCF)
+        y_rated (ndarray): List where element `i` is ndarray of `(xs, rating)` where `xs` is all x that rated y and the ratings.
+        X (ndarray): the training set with size (|TRAINSET|, 3)
         S (ndarray): similarity matrix
         k (int): number of k-nearest neighbors
         k_min (int): number of minimum k
-        uuCF (boolean): use user-user CF or not
         global_mean (float): mean ratings in training set
-        bu (ndarray): user biases
-        bi (ndarray): item biases
+        bx (ndarray): user biases   (if iiCF)
+        by (ndarray): item biases   (if iiCF)
     Returns:
-        pred (float): predicted rating of user u for item i.
+        pred (float): predicted rating of user x for item y     (if iiCF)
     """
 
-    # k_neighbors = heapq.nlargest(k, neighbors, key=lambda t: t[1])
-
     k_neighbors = np.zeros((k, 3))
-    for i2, rating in items_ratedby_u:
-        sim = S[int(i2), i_id]
+    for y2, rating in y_rated:
+        sim = S[int(y2), y_id]
         argmin = np.argmin(k_neighbors[:, 1])
         if sim > k_neighbors[argmin, 1]:
-            k_neighbors[argmin] = np.array((i2, sim, rating))
+            k_neighbors[argmin] = np.array((y2, sim, rating))
 
-    est = global_mean + bu[u_id] + bi[i_id]
+    est = global_mean + bx[x_id] + by[y_id]
 
-    # user_known, item_known = False, False
-    # if u_id in user_list:
-        # user_known = True
-        # est += bu[u_id]
-    # if i_id in item_list:
-        # item_known = True
-        # est += bi[i_id]
+    # est = global_mean
 
-    # if not (user_known and item_known):
+    # x_known, y_known = False, False
+    # if x_id in x_list:
+        # x_known = True
+        # est += bu[x_id]
+    # if y_id in y_list:
+        # y_known = True
+        # est += bi[y_id]
+
+    # if not (x_known and y_known):
     #     return est
 
     # Compute weighted average
@@ -73,10 +76,7 @@ def _predict(u_id, i_id, items_ratedby_u, S, k, k_min, uuCF, global_mean, bu, bi
         nb = int(nb)
         if sim > 0:
             sum_sim += sim
-            if uuCF:
-                nb_bsl = global_mean + bu[nb] + bi[i_id]
-            else:
-                nb_bsl = global_mean + bu[u_id] + bi[nb]
+            nb_bsl = global_mean + bx[x_id] + by[nb]
             sum_ratings += sim * (r - nb_bsl)
             actual_k += 1
 
