@@ -53,9 +53,11 @@ def _cosine(U, uuCF):
 
     return S
 
+
 def _pcc(U, uuCF):
     S = np.zeros((U.shape[0], U.shape[0]))
     return S
+
 
 @njit
 def _cosine_genome(genome):
@@ -84,7 +86,18 @@ def _cosine_genome(genome):
 
     return S
 
-@njit
+
 def _pcc_genome(genome):
-    S = np.zeros((genome.shape[0], genome.shape[0]))
-    return S
+    """Calculate Pearson correlation coefficient (pcc) simularity score between each movie
+    using movie genome provided by MovieLens20M dataset.
+
+    Args:
+        genome (ndarray): movie genome, where each row contains genome score for that movie.
+
+    Returns:
+        S (ndarray): Similarity matrix
+    """
+    # Subtract mean, to calculate Pearson similarity score
+    genome -= np.mean(genome, axis=1, keepdims=True)
+
+    return _cosine_genome(genome)
