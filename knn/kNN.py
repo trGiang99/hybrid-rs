@@ -8,7 +8,7 @@ from scipy.sparse.linalg import norm
 
 from utils import timer
 from .sim import _cosine, _pcc, _cosine_genome, _pcc_genome
-from .knn_helper import _baseline_sgd, _predict_baseline
+from .knn_helper import _baseline_sgd, _predict_baseline, _predict_mean
 
 
 class kNN:
@@ -17,12 +17,13 @@ class kNN:
     Args:
         k (int): Number of neibors use in prediction
         min_k (int): The minimum number of neighbors to take into account for aggregation. If there are not enough neighbors, the neighbor aggregation is set to zero
-        distance (str, optional): Distance function. Defaults to "cosine".
-        uuCF (boolean, optional): Assign to 1 if using user-based CF, 0 if using item-based CF. Defaults to 0.
-        normalize (str, optional): Normalization method. Defaults to "none".
-        verbose (boolean): Show progress. Defaults to "False".
+        distance (str, optional): Distance function. Defaults to `"cosine"`.
+        uuCF (boolean, optional): True if using user-based CF, False if using item-based CF. Defaults to `False`.
+        normalize (str, optional): Normalization method. Defaults to `None`.
+        verbose (boolean): Show predicting progress. Defaults to `False`.
+        awareness_constrain (boolean): Only for Baseline model (besides, considered `False`). If `True`, the model must aware of all users and items in the test set, which means that these users and items are in the train set as well. This constrain helps speed up the predicting process (by 1.5 times) but if a user of an item is unknown, kNN will fail to give prediction. Defaults to `True`.
     """
-    def __init__(self, k, min_k=1, distance="cosine", uuCF=False, normalize="none", verbose=False):
+    def __init__(self, k, min_k=1, distance="cosine", uuCF=False, normalize="none", verbose=False, awareness_constrain=True):
         self.k = k
         self.min_k = min_k
 
@@ -33,6 +34,7 @@ class kNN:
         self.uuCF = uuCF
 
         self.verbose = verbose
+        self.awareness_constrain = awareness_constrain
 
         self.__normalize_method = ["none", "mean", "baseline"]
         assert normalize in self.__normalize_method, f"Normalize method should be one of {self.__normalize_method}"
@@ -135,23 +137,44 @@ class kNN:
         Returns:
             pred (float): prediction of the given user/item pair.
         """
-        if(self.utility[x_id, y_id]):
-            if self.uuCF:
-                print (f"User {y_id} has already rated movie {x_id}.")
-            else:
-                print (f"User {x_id} has already rated movie {y_id}.")
-            return
-
         if self.__normalize == self.__baseline:
+            if self.awareness_constrain:
+                pred = self.global_mean
+
+                x_known, y_known = False, False
+                if x_id in self.x_list:
+                    x_known = True
+                    pred += self.bx[x_id]
+                if y_id in self.y_list:
+                    y_known = True
+                    pred += self.by[y_id]
+
+                if not (x_known and y_known):
+                    return pred
+
             pred = _predict_baseline(x_id, y_id, self.y_rated[x_id], self.S, self.k, self.min_k, self.global_mean, self.bx, self.by)
+            return pred
 
         elif self.__normalize == self.__mean_normalize:
+            x_known, y_known = False, False
+
+            if x_id in self.x_list:
+                x_known = True
+            if y_id in self.y_list:
+                y_known = True
+
+            if not (x_known and y_known):
+                if uuCF:
+                    print(f"Can not predict rating of user {y_id} for item {x_id}.")
+                else:
+                    print(f"Can not predict rating of user {x_id} for item {y_id}.")
+                return
+
+            pred += _predict_mean(x_id, y_id, self.y_rated[x_id], self.mu, self.S, self.k, self.min_k)
             return pred + self.mu[u]
 
-        return pred
-
     def __recommend(self, u):
-        """Determine all items should be recommended for user u. (uuCF =1)
+        """Determine all items should be recommended for user u. (uuCF = 1)
         or all users who might have interest on item u (uuCF = 0)
         The decision is made based on all i such that: self.pred(u, i) > 0.
         Suppose we are considering items which have not been rated by u yet.
@@ -185,8 +208,8 @@ class kNN:
         This method only normalize the data base on the mean of ratings.
         Any unrated item will remain the same.
         """
-        tot = np.array(self.X.sum(axis=1).squeeze())[0]
-        cts = np.diff(self.X.indptr)
+        tot = np.array(self.utility.sum(axis=1).squeeze())[0]
+        cts = np.diff(self.utility.indptr)
         cts[cts == 0] = 1       # Avoid dividing by 0 resulting nan.
 
         # Mean ratings of each users.
@@ -196,12 +219,12 @@ class kNN:
         d = sparse.diags(self.mu, 0)
 
         # A matrix that is like Utility, but has 1 at the non-zero position instead of the ratings.
-        b = self.X.copy()
+        b = self.utility.copy()
         b.data = np.ones_like(b.data)
 
         # d*b = Mean matrix - a matrix with the means of each row at the non-zero position
         # Subtract the mean matrix to get the normalize data.
-        self.X -= d*b
+        self.utility -= d*b
 
     def __baseline(self):
         """Normalize the utility matrix.
