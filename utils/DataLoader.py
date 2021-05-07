@@ -5,10 +5,12 @@ import numpy as np
 class DataLoader:
     """
     Contain methods to read and split dataset into training set and test set.
+    All dataset is preprocessed by mapping ID according to the training set and return as `ndarray`.
+    (IDs which are not included in the training set remain the same).
 
     Args:
-            data_folder (string): Path to folder that contain dataset
-            genome_folder (string): Path to folder that contain the genome_scores file
+        data_folder (string): Path to folder that contain dataset
+        genome_folder (string): Path to folder that contain the genome_scores file
     """
     def __init__(self, data_folder, genome_folder=None):
         self.__data_folder = data_folder
@@ -46,6 +48,17 @@ class DataLoader:
         self.__val_data = self.__preprocess(self.__val_data)
 
     def __preprocess(self, data):
+        """Map the id of all users and items according to user_dict and item_dict.
+        To create the user_dict, all user ID in the training set is first sorted, then the first ID is map to 0 and so on.
+        Do the same for item_dict.
+        This process is done via `self.__read_trainset()`.
+
+        Args:
+            data (Dataframe): The dataset that need to be preprocessed.
+
+        Returns:
+            ndarray: The array with all id mapped.
+        """
         data['u_id'] = data['u_id'].map(self.user_dict)
         data['i_id'] = data['i_id'].map(self.item_dict)
 
@@ -59,15 +72,15 @@ class DataLoader:
 
     def load_csv2ndarray(self, use_val=False, columns=['u_id', 'i_id', 'rating', 'timestamp']):
         """
-        Load training set, validate set and test set.
-        Each as DataFrame
+        Load training set, validate set and test set via `.csv` file.
+        Each as `ndarray`.
 
         Args:
-            has_val (boolean): Denote if using validate data or not. Defaults to True.
+            has_val (boolean): Denote if loading validate data or not. Defaults to True.
             columns (list): Columns name for DataFrame. Defaults to ['u_id', 'i_id', 'rating', 'timestamp'].
 
         Returns:
-            train, val, test (np.array)
+            train, val, test (np.array): Preprocessed data.
         """
         self.__read_trainset(columns)
         self.__read_testset(columns)
