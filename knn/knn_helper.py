@@ -10,6 +10,9 @@ def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0
         global_mean (float): mean ratings in training set
         n_users (np.array): number of users
         n_items (np.array): number of items
+        n_epochs (int): number of iterations to train
+        lr (float): the learning rate
+        reg (float): the regularization strength
     Returns:
         A tuple ``(bu, bi)``, which are users and items baselines.
     """
@@ -28,44 +31,68 @@ def _baseline_sgd(X, global_mean, n_users, n_items, n_epochs=20, lr=0.005, reg=0
 
 
 @njit
-def _predict(u_id, i_id, items_ratedby_u, S, k, k_min, uuCF, global_mean, bu, bi):
-    """Optimize biases using SGD.
+def _predict(x_id, y_id, y_rated, S, k, k_min):
+    """Predict rating of user x for item y (if iiCF).
     Args:
-        u (int): users Id
-        i (int): items Id
-        X (ndarray): utility matrix
+        x_id (int): users Id    (if iiCF)
+        y_id (int): items Id    (if iiCF)
+        y_rated (ndarray): List where element `i` is ndarray of `(xs, rating)` where `xs` is all x that rated y and the ratings.
         S (ndarray): similarity matrix
         k (int): number of k-nearest neighbors
         k_min (int): number of minimum k
-        uuCF (boolean): use user-user CF or not
-        global_mean (float): mean ratings in training set
-        bu (ndarray): user biases
-        bi (ndarray): item biases
     Returns:
-        pred (float): predicted rating of user u for item i.
+        pred (float): predicted rating of user x for item y     (if iiCF)
     """
 
-    # k_neighbors = heapq.nlargest(k, neighbors, key=lambda t: t[1])
-
-    k_neighbors = np.zeros((k, 3))
-    for i2, rating in items_ratedby_u:
-        sim = S[int(i2), i_id]
+    k_neighbors = np.zeros((k, 2))
+    for x2, rating in y_rated:
+        if int(x2) == x_id:
+            continue       # Bo qua item dang xet
+        sim = S[int(x2), x_id]
         argmin = np.argmin(k_neighbors[:, 1])
         if sim > k_neighbors[argmin, 1]:
-            k_neighbors[argmin] = np.array((i2, sim, rating))
+            k_neighbors[argmin] = np.array((sim, rating))
 
-    est = global_mean + bu[u_id] + bi[i_id]
+    # Compute weighted average
+    sum_sim = sum_ratings = actual_k = 0
+    for (sim, r) in k_neighbors:
+        if sim > 0:
+            sum_sim += sim
+            sum_ratings += sim * r
+            actual_k += 1
 
-    # user_known, item_known = False, False
-    # if u_id in user_list:
-        # user_known = True
-        # est += bu[u_id]
-    # if i_id in item_list:
-        # item_known = True
-        # est += bi[i_id]
+    if actual_k < k_min:
+        sum_ratings = 0
 
-    # if not (user_known and item_known):
-    #     return est
+    if sum_sim:
+        est = sum_ratings / sum_sim
+
+    return est
+
+
+@njit
+def _predict_mean(x_id, y_id, y_rated, mu, S, k, k_min):
+    """Predict rating of user x for item y (if iiCF).
+    Args:
+        x_id (int): users Id    (if iiCF)
+        y_id (int): items Id    (if iiCF)
+        y_rated (ndarray): List where element `i` is ndarray of `(xs, rating)` where `xs` is all x that rated y and the ratings.
+        mu (ndarray): List of mean ratings of all user (if iiCF, or all item if uuCF).
+        S (ndarray): similarity matrix
+        k (int): number of k-nearest neighbors
+        k_min (int): number of minimum k
+    Returns:
+        pred (float): predicted rating of user x for item y     (if iiCF)
+    """
+
+    k_neighbors = np.zeros((k, 3))
+    for x2, rating in y_rated:
+        if int(x2) == x_id:
+            continue       # Bo qua item dang xet
+        sim = S[int(x2), x_id]
+        argmin = np.argmin(k_neighbors[:, 1])
+        if sim > k_neighbors[argmin, 1]:
+            k_neighbors[argmin] = np.array((x2, sim, rating))
 
     # Compute weighted average
     sum_sim = sum_ratings = actual_k = 0
@@ -73,10 +100,54 @@ def _predict(u_id, i_id, items_ratedby_u, S, k, k_min, uuCF, global_mean, bu, bi
         nb = int(nb)
         if sim > 0:
             sum_sim += sim
-            if uuCF:
-                nb_bsl = global_mean + bu[nb] + bi[i_id]
-            else:
-                nb_bsl = global_mean + bu[u_id] + bi[nb]
+            sum_ratings += sim * (r - mu[nb])
+            actual_k += 1
+
+    if actual_k < k_min:
+        sum_ratings = 0
+
+    if sum_sim:
+        est = sum_ratings / sum_sim
+
+    return est
+
+
+@njit
+def _predict_baseline(x_id, y_id, y_rated, S, k, k_min, global_mean, bx, by):
+    """Predict rating of user x for item y (if iiCF) using baseline estimate.
+    Args:
+        x_id (int): users Id    (if iiCF)
+        y_id (int): items Id    (if iiCF)
+        y_rated (ndarray): List where element `i` is ndarray of `(xs, rating)` where `xs` is all x that rated y and the ratings.
+        X (ndarray): the training set with size (|TRAINSET|, 3)
+        S (ndarray): similarity matrix
+        k (int): number of k-nearest neighbors
+        k_min (int): number of minimum k
+        global_mean (float): mean ratings in training set
+        bx (ndarray): user biases   (if iiCF)
+        by (ndarray): item biases   (if iiCF)
+    Returns:
+        pred (float): predicted rating of user x for item y     (if iiCF)
+    """
+
+    k_neighbors = np.zeros((k, 3))
+    for x2, rating in y_rated:
+        if int(x2) == x_id:
+            continue       # Bo qua item dang xet
+        sim = S[int(x2), x_id]
+        argmin = np.argmin(k_neighbors[:, 1])
+        if sim > k_neighbors[argmin, 1]:
+            k_neighbors[argmin] = np.array((x2, sim, rating))
+
+    est = global_mean + bx[x_id] + by[y_id]
+
+    # Compute weighted average
+    sum_sim = sum_ratings = actual_k = 0
+    for (nb, sim, r) in k_neighbors:
+        nb = int(nb)
+        if sim > 0:
+            sum_sim += sim
+            nb_bsl = global_mean + bx[nb] + by[y_id]
             sum_ratings += sim * (r - nb_bsl)
             actual_k += 1
 
@@ -85,4 +156,5 @@ def _predict(u_id, i_id, items_ratedby_u, S, k, k_min, uuCF, global_mean, bu, bi
 
     if sum_sim:
         est += sum_ratings / sum_sim
+
     return est

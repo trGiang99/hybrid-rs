@@ -4,13 +4,17 @@ from loader import DataLoader
 from svd_knn import kNN
 
 
-print("\nReimlementation of KNN with mean normalization:")
+print("\nReimlementation of KNNBaseline with numba:")
 
 train_data, test_data = DataLoader(data_folder="movielens-sample").load_csv2df(use_val=False)
 
-knn = kNN(k=5, distance="cosine", uuCF=1, normalize="mean")
+knn = kNN(k=20, distance="pearson", uuCF=False, normalize="baseline", verbose=True)
 knn.fit(train_data=train_data)
-print (f'\nRMSE: {knn.rmse(test_data)}')
+
+knn.predict(test_data)
+
+knn.rmse()
+knn.mae()
 
 
 print("\nKNN with mean normalization from NicolasHug/Surprise:")
