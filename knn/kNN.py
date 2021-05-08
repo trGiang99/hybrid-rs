@@ -7,7 +7,7 @@ from scipy import sparse
 from scipy.sparse.linalg import norm
 
 from utils import timer
-from .sim import _cosine, _pcc, _cosine_genome, _pcc_genome
+from .similarities import _cosine, _pcc, _cosine_genome, _pcc_genome
 from .knn_helper import _baseline_sgd, _predict, _predict_mean, _predict_baseline
 
 
@@ -21,9 +21,9 @@ class kNN:
         uuCF (boolean, optional): True if using user-based CF, False if using item-based CF. Defaults to `False`.
         normalize (str, optional): Normalization method. Defaults to `None`.
         verbose (boolean): Show predicting progress. Defaults to `False`.
-        awareness_constrain (boolean): Only for Baseline model (besides, considered `False`). If `True`, the model must aware of all users and items in the test set, which means that these users and items are in the train set as well. This constrain helps speed up the predicting process (by 1.5 times) but if a user of an item is unknown, kNN will fail to give prediction. Defaults to `True`.
+        awareness_constrain (boolean): Only for Baseline model (besides, considered `False`). If `True`, the model must aware of all users and items in the test set, which means that these users and items are in the train set as well. This constrain helps speed up the predicting process (by 1.5 times) but if a user of an item is unknown, kNN will fail to give prediction. Defaults to `False`.
     """
-    def __init__(self, k, min_k=1, distance="cosine", uuCF=False, normalize="none", verbose=False, awareness_constrain=True):
+    def __init__(self, k, min_k=1, distance="cosine", uuCF=False, normalize="none", verbose=False, awareness_constrain=False):
         self.k = k
         self.min_k = min_k
 
@@ -55,23 +55,35 @@ class kNN:
         """
         self.X = train_data
 
-        if self.uuCF:
-            X[:, [0, 1]] = X[:, [1, 0]]     # Swap user_id column to movie_id column
+        if not self.uuCF:
+            self.X[:, [0, 1]] = self.X[:, [1, 0]]     # Swap user_id column to movie_id column
 
-        self.x_list = np.unique(self.X[:, 0])       # For iiCF, x -> user
-        self.y_list = np.unique(self.X[:, 1])       # For iiCF, y -> item
+        self.global_mean = np.mean(self.X[:, 2])
+
+        self.x_list = np.unique(self.X[:, 0])       # For uuCF, x -> user
+        self.y_list = np.unique(self.X[:, 1])       # For uuCF, y -> item
 
         self.n_x = len(self.x_list)
         self.n_y = len(self.y_list)
-
-        if(self.__normalize):
-            print("Normalizing the utility matrix ...")
-            self.__normalize()
 
         self.utility = sparse.csr_matrix((
             self.X[:, 2],
             (self.X[:, 0].astype(int), self.X[:, 1].astype(int))
         ))
+
+        if(self.__normalize):
+            print("Normalizing the utility matrix ...")
+            self.__normalize()
+
+        # List where element `i` is ndarray of `(xs, ratings)` where `xs` is all x that rated y, and the ratings.
+        self.y_rated = []
+        print("Listing all users rated each item (or vice versa if iiCF) ...")
+        for id in range(self.n_y):
+            col_i = self.utility.getcol(id)
+            ys_rated_x = col_i.nonzero()[0]
+            ratings = col_i.data
+
+            self.y_rated.append(np.dstack((ys_rated_x, ratings))[0])
 
         if sim is None:
             print('Computing similarity matrix ...')
@@ -79,37 +91,29 @@ class kNN:
                 if genome is not None:
                     self.S = _cosine_genome(genome)
                 else:
-                    self.S = _cosine(self.utility, self.uuCF)
+                    self.S = _cosine(self.n_x, self.y_rated)
             elif self.__distance == "pearson":
                 if genome is not None:
                     self.S = _pcc_genome(genome)
                 else:
-                    self.S = _pcc(self.utility, self.uuCF)
+                    self.S = _pcc(self.n_x, self.y_rated)
         else:
             self.S = sim
 
-        # List where element `i` is ndarray of `(xs, rating)` where `xs` is all x that rated y and the ratings.
-        self.y_rated = []
-        print("Listing all items rated by each users (or vice versa if uuCF) ...")
-        for id in range(self.n_x):
-            row_i = self.utility.getrow(id)
-            ys_rated_x = row_i.nonzero()[1]
-            ratings = row_i.data
-
-            self.y_rated.append(np.dstack((ys_rated_x, ratings))[0])
-
     @timer("Time for predicting: ")
-    def predict(self, X):
+    def predict(self, test_set):
         """Returns estimated ratings of several given user/item pairs.
         Args:
-            X (pandas DataFrame): storing all user/item pairs we want to predict
-            the ratings. Must contains columns labeled `u_id` and `i_id`.
+            test_set (adarray): storing all user/item pairs we want to predict the ratings.
         Returns:
             predictions (ndarray): Storing all predictions of the given user/item pairs.
         """
+        if not self.uuCF:
+            test_set[:, [0, 1]] = test_set[:, [1, 0]]     # Swap user_id column to movie_id column
+
         self.predictions = []
-        self.ground_truth = X[:, 2]
-        n_pairs = X.shape[0]
+        self.ground_truth = test_set[:, 2]
+        n_pairs = test_set.shape[0]
 
         print(f"Predicting {n_pairs} pairs of user-item ...")
 
@@ -117,12 +121,12 @@ class kNN:
             bar = progressbar.ProgressBar(maxval=n_pairs, widgets=[progressbar.Bar(), ' ', progressbar.Percentage()])
             bar.start()
             for pair in range(n_pairs):
-                self.predictions.append(self.predict_pair(X[pair, 0].astype(int), X[pair, 1].astype(int)))
+                self.predictions.append(self.predict_pair(test_set[pair, 0].astype(int), test_set[pair, 1].astype(int)))
                 bar.update(pair + 1)
             bar.finish()
         else:
             for pair in range(n_pairs):
-                self.predictions.append(self.predict_pair(X[pair, 0].astype(int), X[pair, 1].astype(int)))
+                self.predictions.append(self.predict_pair(test_set[pair, 0].astype(int), test_set[pair, 1].astype(int)))
 
         self.predictions = np.array(self.predictions)
         return self.predictions
@@ -131,14 +135,14 @@ class kNN:
         """Predict the rating of user u for item i
 
         Args:
-            x_id (int): index of x (For iiCF, x -> user)
-            y_id (int): index of y (For iiCF, y -> item)
+            x_id (int): index of x (For uuCF, x -> user)
+            y_id (int): index of y (For uuCF, y -> item)
 
         Returns:
             pred (float): prediction of the given user/item pair.
         """
         if self.__normalize == self.__baseline:
-            if self.awareness_constrain:
+            if not self.awareness_constrain:
                 pred = self.global_mean
 
                 x_known, y_known = False, False
@@ -152,7 +156,7 @@ class kNN:
                 if not (x_known and y_known):
                     return pred
 
-            pred = _predict_baseline(x_id, y_id, self.y_rated[x_id], self.S, self.k, self.min_k, self.global_mean, self.bx, self.by)
+            pred = _predict_baseline(x_id, y_id, self.y_rated[y_id], self.S, self.k, self.min_k, self.global_mean, self.bx, self.by)
             return pred
 
         else:
@@ -164,17 +168,17 @@ class kNN:
                 y_known = True
 
             if not (x_known and y_known):
-                if uuCF:
-                    print(f"Can not predict rating of user {y_id} for item {x_id}.")
-                else:
+                if self.uuCF:
                     print(f"Can not predict rating of user {x_id} for item {y_id}.")
-                return
+                else:
+                    print(f"Can not predict rating of user {y_id} for item {x_id}.")
+                return self.global_mean
 
             if self.__normalize == self.__mean_normalize:
-                pred += _predict_mean(x_id, y_id, self.y_rated[x_id], self.mu, self.S, self.k, self.min_k)
-                return pred + self.mu[u]
+                pred = _predict_mean(x_id, y_id, self.y_rated[y_id], self.mu, self.S, self.k, self.min_k)
+                return pred + self.mu[x_id]
             else:
-                return _predict(x_id, y_id, self.y_rated[x_id], self.S, self.k, self.min_k)
+                return _predict(x_id, y_id, self.y_rated[y_id], self.S, self.k, self.min_k)
 
     def __recommend(self, u):
         """Determine all items should be recommended for user u. (uuCF = 1)
@@ -234,6 +238,4 @@ class kNN:
         Compute the baseline estimate for all user and movie using the following fomular.
         b_{ui} = \mu + b_u + b_i
         """
-        self.global_mean = np.mean(self.X[:, 2])
-
         self.bx, self.by = _baseline_sgd(self.X, self.global_mean, self.n_x, self.n_y)

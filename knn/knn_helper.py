@@ -44,19 +44,18 @@ def _predict(x_id, y_id, y_rated, S, k, k_min):
         pred (float): predicted rating of user x for item y     (if iiCF)
     """
 
-    k_neighbors = np.zeros((k, 3))
-    for y2, rating in y_rated:
-        if int(y2) == y_id:
+    k_neighbors = np.zeros((k, 2))
+    for x2, rating in y_rated:
+        if int(x2) == x_id:
             continue       # Bo qua item dang xet
-        sim = S[int(y2), y_id]
+        sim = S[int(x2), x_id]
         argmin = np.argmin(k_neighbors[:, 1])
         if sim > k_neighbors[argmin, 1]:
-            k_neighbors[argmin] = np.array((y2, sim, rating))
+            k_neighbors[argmin] = np.array((sim, rating))
 
     # Compute weighted average
     sum_sim = sum_ratings = actual_k = 0
-    for (nb, sim, r) in k_neighbors:
-        nb = int(nb)
+    for (sim, r) in k_neighbors:
         if sim > 0:
             sum_sim += sim
             sum_ratings += sim * r
@@ -87,13 +86,13 @@ def _predict_mean(x_id, y_id, y_rated, mu, S, k, k_min):
     """
 
     k_neighbors = np.zeros((k, 3))
-    for y2, rating in y_rated:
-        if int(y2) == y_id:
+    for x2, rating in y_rated:
+        if int(x2) == x_id:
             continue       # Bo qua item dang xet
-        sim = S[int(y2), y_id]
+        sim = S[int(x2), x_id]
         argmin = np.argmin(k_neighbors[:, 1])
         if sim > k_neighbors[argmin, 1]:
-            k_neighbors[argmin] = np.array((y2, sim, rating))
+            k_neighbors[argmin] = np.array((x2, sim, rating))
 
     # Compute weighted average
     sum_sim = sum_ratings = actual_k = 0
@@ -132,13 +131,13 @@ def _predict_baseline(x_id, y_id, y_rated, S, k, k_min, global_mean, bx, by):
     """
 
     k_neighbors = np.zeros((k, 3))
-    for y2, rating in y_rated:
-        if int(y2) == y_id:
+    for x2, rating in y_rated:
+        if int(x2) == x_id:
             continue       # Bo qua item dang xet
-        sim = S[int(y2), y_id]
+        sim = S[int(x2), x_id]
         argmin = np.argmin(k_neighbors[:, 1])
         if sim > k_neighbors[argmin, 1]:
-            k_neighbors[argmin] = np.array((y2, sim, rating))
+            k_neighbors[argmin] = np.array((x2, sim, rating))
 
     est = global_mean + bx[x_id] + by[y_id]
 
@@ -148,7 +147,7 @@ def _predict_baseline(x_id, y_id, y_rated, S, k, k_min, global_mean, bx, by):
         nb = int(nb)
         if sim > 0:
             sum_sim += sim
-            nb_bsl = global_mean + bx[x_id] + by[nb]
+            nb_bsl = global_mean + bx[nb] + by[y_id]
             sum_ratings += sim * (r - nb_bsl)
             actual_k += 1
 
