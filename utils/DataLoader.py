@@ -26,7 +26,7 @@ class DataLoader:
     def __read_trainset(self, columns):
         self.__train_data = pd.read_csv(
             self.__data_folder + "/rating_train.csv",
-            header=0, names=columns
+            header=None, names=columns
         )
 
         self.user_dict = {uIds: idx for idx, uIds in enumerate(np.sort(self.__train_data['u_id'].unique()))}
@@ -36,14 +36,14 @@ class DataLoader:
     def __read_testset(self, columns):
         self.__test_data = pd.read_csv(
             self.__data_folder + "/rating_test.csv",
-            header=0, names=columns
+            header=None, names=columns
         )
         self.__test_data = self.__preprocess(self.__test_data)
 
     def __read_valset(self, columns):
         self.__val_data = pd.read_csv(
             self.__data_folder + "/rating_val.csv",
-            header=0, names=columns
+            header=None, names=columns
         )
         self.__val_data = self.__preprocess(self.__val_data)
 
@@ -59,8 +59,8 @@ class DataLoader:
         Returns:
             ndarray: The array with all id mapped.
         """
-        data['u_id'] = data['u_id'].map(self.user_dict)
-        data['i_id'] = data['i_id'].map(self.item_dict)
+        data['u_id'] = data['u_id'].replace(self.user_dict)
+        data['i_id'] = data['i_id'].replace(self.item_dict)
 
         # Tag unknown users/items with -1 (when val)
         data.fillna(-1, inplace=True)
@@ -104,7 +104,7 @@ class DataLoader:
         """
         genome = pd.read_csv(
             self.__genome_folder + "/" + genome_file,
-            header=0, names=columns
+            header=None, names=columns
         )
 
         if reset_index:

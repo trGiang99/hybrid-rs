@@ -1,6 +1,6 @@
 import csv
 import numpy as np
-from svd_knn.utils import timer
+from utils import timer
 
 
 @timer(text='\nSampling took ')
