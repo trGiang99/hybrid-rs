@@ -78,7 +78,6 @@ class DataLoader:
         Args:
             has_val (boolean): Denote if loading validate data or not. Defaults to True.
             columns (list): Columns name for DataFrame. Defaults to ['u_id', 'i_id', 'rating', 'timestamp'].
-
         Returns:
             train, val, test (np.array): Preprocessed data.
         """
@@ -92,13 +91,11 @@ class DataLoader:
             return self.__train_data, self.__test_data
 
     def load_genome_fromcsv(self, genome_file="genome_scores.csv", columns=["i_id", "g_id", "score"], reset_index=False):
-        """
-        Load genome scores from file.
+        """Load genome scores from .csv file.
         Args:
             genome_file (string): File name that contain genome scores. Must be in csv format.
             columns (list, optional): Columns name for DataFrame. Must be ["i_id", "g_id", "score"] or ["i_id", "score", "g_id"].
-            reset_index (boolean): Reset the genome_tag column or not. Defaults to False.
-
+            reset_index (boolean): If True then reset the genome_tag column, continuous from 1. Defaults to False.
         Returns:
             scores (DataFrame)
         """
