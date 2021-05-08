@@ -8,7 +8,7 @@ from scipy.sparse.linalg import norm
 
 from utils import timer
 from .sim import _cosine, _pcc, _cosine_genome, _pcc_genome
-from .knn_helper import _baseline_sgd, _predict_baseline, _predict_mean
+from .knn_helper import _baseline_sgd, _predict, _predict_mean, _predict_baseline
 
 
 class kNN:
@@ -155,7 +155,7 @@ class kNN:
             pred = _predict_baseline(x_id, y_id, self.y_rated[x_id], self.S, self.k, self.min_k, self.global_mean, self.bx, self.by)
             return pred
 
-        elif self.__normalize == self.__mean_normalize:
+        else:
             x_known, y_known = False, False
 
             if x_id in self.x_list:
@@ -170,8 +170,11 @@ class kNN:
                     print(f"Can not predict rating of user {x_id} for item {y_id}.")
                 return
 
-            pred += _predict_mean(x_id, y_id, self.y_rated[x_id], self.mu, self.S, self.k, self.min_k)
-            return pred + self.mu[u]
+            if self.__normalize == self.__mean_normalize:
+                pred += _predict_mean(x_id, y_id, self.y_rated[x_id], self.mu, self.S, self.k, self.min_k)
+                return pred + self.mu[u]
+            else:
+                return _predict(x_id, y_id, self.y_rated[x_id], self.S, self.k, self.min_k)
 
     def __recommend(self, u):
         """Determine all items should be recommended for user u. (uuCF = 1)
