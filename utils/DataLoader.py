@@ -26,7 +26,7 @@ class DataLoader:
     def __read_trainset(self, columns):
         self.__train_data = pd.read_csv(
             self.__data_folder + "/rating_train.csv",
-            header=None, names=columns
+            header=0, names=columns
         )
 
         self.user_dict = {uIds: idx for idx, uIds in enumerate(np.sort(self.__train_data['u_id'].unique()))}
@@ -36,14 +36,14 @@ class DataLoader:
     def __read_testset(self, columns):
         self.__test_data = pd.read_csv(
             self.__data_folder + "/rating_test.csv",
-            header=None, names=columns
+            header=0, names=columns
         )
         self.__test_data = self.__preprocess(self.__test_data)
 
     def __read_valset(self, columns):
         self.__val_data = pd.read_csv(
             self.__data_folder + "/rating_val.csv",
-            header=None, names=columns
+            header=0, names=columns
         )
         self.__val_data = self.__preprocess(self.__val_data)
 
@@ -104,7 +104,7 @@ class DataLoader:
         """
         genome = pd.read_csv(
             self.__genome_folder + "/" + genome_file,
-            header=None, names=columns
+            header=0, names=columns
         )
 
         if reset_index:
