@@ -1,5 +1,13 @@
+# Cache folder
 /__pycache__/*
+
+# Python virtual environment folder
 /env/*
+
+# Data folders
 /movielens20M/*
 /movielens-sample/*
 /movielens10k/*
+
+# Testing folder
+/svd_knn/*
